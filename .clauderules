@@ -1,0 +1,70 @@
+# .clauderules
+# AI 에이전트용 Spring Boot 3.x + Java 21 고도화 코딩 규칙 컨벤션
+
+version: "2026.3"
+environment:
+  java: "Java 21 (LTS)"
+  framework: "Spring Boot 3.2.x 이상"
+  database: "PostgreSQL"
+  orm: "Spring Data JPA"
+
+architecture_rules:
+  layer_structure: "Controller ➔ Service ➔ Repository ➔ Entity"
+  dependency_direction:
+    - "상위 레이어는 하위 레이어만 참조할 수 있으며, 하위 레이어는 상위 레이어를 절대 참조할 수 없다."
+    - "Entity는 순수한 도메인 무결성을 유지하며, Controller나 DTO 레이어의 존재를 몰라야 한다."
+    - "모든 비즈니스 API 응답과 요청은 Entity를 직접 노출하지 않고, 반드시 별도의 DTO를 거쳐야 한다. (record 타입은 사용하지 않으며, Lombok 기반의 일반 클래스로 작성한다.)"
+  package_structure:
+    - "모든 도메인 공통 Enum 클래스는 'global.common.enums' 또는 'domain.common.enums' 패키지에 일괄 관리한다."
+
+coding_conventions:
+  naming:
+    classes: "PascalCase (예: PokemonService, PokemonRepository)"
+    methods_variables: "camelCase (예: findByPokemonNumber, isEvolutionReady)"
+    constants: "UPPER_SNAKE_CASE (예: MAX_STAT_LIMIT)"
+
+  consistency:
+    - "신규 코드 작성 시 프로젝트 내 기존 코드의 구현 패턴, 네이밍 스타일 및 아키처 흐름을 철저히 분석하고 이와 완벽한 일관성을 유지해야 한다."
+
+  comments:
+    - "코드가 동작하는 방식을 그대로 서술하거나 설명하는 주석(예: // 상품을 저장한다)은 절대 달지 않는다."
+    - "코드는 그 자체로 의도가 드러나는 '클린 코드' 원칙을 준수해야 하며, 주석은 코드로 표현할 수 없는 '비즈니스적 배경(Why)'이나 '특별한 예외 처리 이유'를 명시할 때만 제한적으로 사용한다."
+
+  java_21_features:
+    - "record 타입은 사용하지 않는다. DTO와 읽기 전용 데이터 객체는 Lombok(@Getter, @Builder 등)을 활용한 일반 클래스로 작성하고, @Setter를 배제하여 불변성을 지향한다."
+    - "switch 문법 사용 시 Java 21의 'Pattern Matching for switch'를 적극 활용하여 타입을 매칭할 것. (단, record 기반의 'Record Patterns'는 사용하지 않는다.)"
+    - "기존의 장황한 if-else 인스턴스 체크 대신 패턴 매칭(Pattern Matching for instanceof)을 사용할 것."
+    - "긴 SQL 쿼리나 복잡한 문자열 정의 시 'Text Blocks (\"\"\")'를 사용할 것."
+    - "Null 리턴은 엄격히 금지하며, 값이 비어있을 수 있는 경우 반드시 'Optional<T>'를 반환할 것."
+    - "대규모 트래픽 처리나 비동기 태스크 선언 시, 무거운 플랫폼 스레드 대신 Java 21의 가상 스레드(Virtual Threads) 풀 환경을 고려하여 코드를 작성할 것."
+
+library_constraints:
+  lombok:
+    allowed:
+      - "생산성 극대화를 위해 롬복(Lombok) 기능을 최대한 사용할 것."
+      - "@Getter, @NoArgsConstructor, @AllArgsConstructor, @RequiredArgsConstructor, @Builder, @Slf4j 등 적극 활용."
+    forbidden:
+      - "@Setter 사용을 엄격히 금지한다. 객체의 상태 변경은 엔티티 내부의 의미 있는 비즈니스 메서드를 통해서만 이루어져야 한다."
+      - "@Data 사용을 금지한다. 예측 불허한 사이드 이펙트와 toString() 순환 참조를 방지하기 위함이다."
+  dependency_injection:
+    - "@Autowired를 통한 필드 주입은 절대 금지하며, 오직 생성자 주입만 사용할 것. 롬복의 @RequiredArgsConstructor를 적극 활용한다."
+
+jpa_conventions:
+  performance_and_concurrency:
+    - "N+1 문제를 방지하기 위해 모든 연관관계 fetch 전략은 'FetchType.LAZY'를 기본으로 설정할 것."
+    - "복잡한 다중 조인 및 동적 쿼리는 명시적 JPQL Fetch Join 또는 QueryDSL을 사용하여 작성할 것."
+    - "데이터 동시성 수정 문제가 발생할 수 있는 비즈니스 핵심 엔티티에는 JPA '@Version'을 이용한 낙관적 락(Optimistic Lock) 메커니즘을 포함할 것."
+  transaction:
+    - "@Transactional은 오직 Service 레이어의 public 메서드에만 선언할 것."
+    - "단순 조회 메서드에는 반드시 '@Transactional(readOnly = true)'를 붙여 메모리 및 스냅샷 최적화를 도모할 것."
+  mapping_rules:
+    - "성능 최적화용 물리 인덱스는 DB 스크립트(DDL)에서 관리하며, @Table(indexes = ...)과 같이 엔티티 내부에 인덱스를 명시하지 않는다."
+    - "물리적인 외래키(FK) 제약조건은 DB 상에서 물리적으로 설정하지 않는다(DDL 생성 시 FK 제약조건 제외). 외래키 연관관계 설정과 무결성 검증은 오직 JPA 엔티티 레이어의 @ManyToOne 등을 통해서만 논리적으로 제어한다."
+    - "복잡성 제어 및 사이드 이펙트 방지를 위해 @OneToMany(일대다) 연관관계 자식 컬렉션 매핑은 절대 생성하지 않는다. 다대일(@ManyToOne) 단방향 매핑만을 사용하며, 필요 시 자식 엔티티 레포지토리에서 외래키 ID 조건으로 직접 조회한다."
+
+domain_specific_rules:
+  commerce_business_logic:
+    - "상품 고유 코드(productCode)는 시스템 전체에서 유니크해야 하며, 글로벌 표준 규격(예: 'PROD-2026-'로 시작하는 UUID 또는 순차 규격)을 준수해야 한다."
+    - "상품 판매 상태(ProductStatus)는 common 패키지 내 enums 패키지에서 Enum 구조(SALE, SOLD_OUT, HIDDEN, DISCONTINUED)로 관리하며, 기본값은 'HIDDEN(가공 중)'이어야 한다."
+    - "모든 상품의 가격(price) 및 재고 수량(stockQuantity)은 0 이상의 정수(또는 BigDecimal)여야 하며, 판매 중(SALE) 상태로 변경 시 재고가 최소 1개 이상 존재해야 하는 유효성 검증을 필수로 수행해야 한다."
+    - "주문(Order) 및 결제(Payment) 생명주기 처리 시, 동시성으로 인한 재고 차감 실패를 방지하기 위해 비관적 락(Pessimistic Lock) 또는 분산 락(Distributed Lock) 검증 단계를 반드시 거쳐야 한다."

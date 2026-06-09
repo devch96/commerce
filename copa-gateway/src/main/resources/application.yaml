@@ -1,0 +1,16 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: copa-gateway
+
+jwt:
+  secret: ${JWT_SECRET:local-dev-secret-please-change-this-to-a-shared-256-bit-key}
+
+gateway:
+  auth-service-uri: ${AUTH_SERVICE_URI:http://localhost:8081}
+  whitelist:
+    - /auth/signup
+    - /auth/login
+    - /auth/reissue

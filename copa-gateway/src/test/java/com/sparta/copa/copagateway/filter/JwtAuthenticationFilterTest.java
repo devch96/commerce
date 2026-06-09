@@ -1,0 +1,166 @@
+package com.sparta.copa.copagateway.filter;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.sparta.copa.copagateway.config.GatewayProperties;
+import com.sparta.copa.copagateway.config.JwtProperties;
+import com.sparta.copa.copagateway.jwt.JwtProvider;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.crypto.SecretKey;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
+import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+
+class JwtAuthenticationFilterTest {
+
+  private static final String SECRET =
+      "copa-gateway-unit-test-secret-key-must-be-at-least-256-bits-long";
+  private static final String USER_ID_HEADER = "X-User-Id";
+  private static final String USER_ROLE_HEADER = "X-User-Role";
+
+  private SecretKey key;
+  private JwtAuthenticationFilter filter;
+
+  @BeforeEach
+  void setUp() {
+    this.key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+    JwtProvider jwtProvider = new JwtProvider(new JwtProperties(SECRET));
+    GatewayProperties gatewayProperties = new GatewayProperties(
+        URI.create("http://localhost:8081"),
+        List.of("/auth/login", "/auth/signup", "/auth/reissue"));
+    this.filter = new JwtAuthenticationFilter(jwtProvider, gatewayProperties);
+  }
+
+  private String token(String userId, String role) {
+    return Jwts.builder()
+        .subject(userId)
+        .claim("role", role)
+        .signWith(key)
+        .compact();
+  }
+
+  private CapturingChain capturingChain() {
+    return new CapturingChain();
+  }
+
+  @Test
+  @DisplayName("화이트리스트 경로는 토큰 없이도 하위 서비스로 통과시킨다")
+  void whitelistedPathPassesThroughWithoutToken() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.post("/auth/login"));
+    CapturingChain chain = capturingChain();
+
+    StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+    assertThat(chain.wasCalled()).isTrue();
+    assertThat(exchange.getResponse().getStatusCode()).isNull();
+  }
+
+  @Test
+  @DisplayName("유효한 토큰이면 X-User-Id, X-User-Role 헤더를 실어 하위 서비스로 전달한다")
+  void validTokenForwardsUserHeaders() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.get("/auth/me")
+            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token("42", "USER")));
+    CapturingChain chain = capturingChain();
+
+    StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+    HttpHeaders forwarded = chain.capturedRequestHeaders();
+    assertThat(forwarded.getFirst(USER_ID_HEADER)).isEqualTo("42");
+    assertThat(forwarded.getFirst(USER_ROLE_HEADER)).isEqualTo("USER");
+  }
+
+  @Test
+  @DisplayName("토큰이 없는 보호 경로는 401을 반환하고 체인을 호출하지 않는다")
+  void missingTokenReturnsUnauthorized() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.get("/auth/me"));
+    CapturingChain chain = capturingChain();
+
+    StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+    assertThat(chain.wasCalled()).isFalse();
+    assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  @DisplayName("위조된 토큰은 401을 반환한다")
+  void invalidTokenReturnsUnauthorized() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.get("/auth/me")
+            .header(HttpHeaders.AUTHORIZATION, "Bearer tampered.token.value"));
+    CapturingChain chain = capturingChain();
+
+    StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+    assertThat(chain.wasCalled()).isFalse();
+    assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  @DisplayName("클라이언트가 주입한 신뢰 헤더는 토큰 검증 결과로 덮어써진다(스푸핑 방지)")
+  void clientInjectedTrustedHeadersAreOverwritten() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.get("/auth/me")
+            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token("42", "USER"))
+            .header(USER_ID_HEADER, "999")
+            .header(USER_ROLE_HEADER, "ADMIN"));
+    CapturingChain chain = capturingChain();
+
+    StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+    HttpHeaders forwarded = chain.capturedRequestHeaders();
+    assertThat(forwarded.getFirst(USER_ID_HEADER)).isEqualTo("42");
+    assertThat(forwarded.getFirst(USER_ROLE_HEADER)).isEqualTo("USER");
+  }
+
+  @Test
+  @DisplayName("화이트리스트 경로라도 클라이언트가 주입한 신뢰 헤더는 제거된다")
+  void clientInjectedTrustedHeadersStrippedOnWhitelistedPath() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.post("/auth/login")
+            .header(USER_ID_HEADER, "999"));
+    CapturingChain chain = capturingChain();
+
+    StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+    assertThat(chain.capturedRequestHeaders().getFirst(USER_ID_HEADER)).isNull();
+  }
+
+  private static final class CapturingChain implements GatewayFilterChain {
+
+    private final AtomicReference<ServerWebExchange> captured = new AtomicReference<>();
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange) {
+      captured.set(exchange);
+      return Mono.empty();
+    }
+
+    boolean wasCalled() {
+      return captured.get() != null;
+    }
+
+    HttpHeaders capturedRequestHeaders() {
+      ServerWebExchange exchange = captured.get();
+      if (exchange == null) {
+        throw new IllegalStateException("필터 체인이 호출되지 않았습니다");
+      }
+      return exchange.getRequest().getHeaders();
+    }
+  }
+}
