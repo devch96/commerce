@@ -1,0 +1,33 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: copa-user
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/copa_auth?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul}
+    username: ${DB_USERNAME:copa}
+    password: ${DB_PASSWORD:copa}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    # 스키마는 Flyway 마이그레이션으로만 관리한다. Hibernate DDL 자동 생성은 사용하지 않는다.
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# Gateway와 동일한 비밀키를 공유해야 게이트웨이가 서명을 검증할 수 있다.
+jwt:
+  secret: ${JWT_SECRET:local-dev-secret-please-change-this-to-a-shared-256-bit-key}
+  access-expiration-millis: ${JWT_ACCESS_EXP:1800000}      # 30분
+  refresh-expiration-millis: ${JWT_REFRESH_EXP:1209600000} # 14일
