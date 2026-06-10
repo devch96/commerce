@@ -17,7 +17,7 @@ class UserRepositoryTest {
 
   @BeforeEach
   void setUp() {
-    userRepository.save(User.create("user@copa.com", "encoded-password", "코파"));
+    userRepository.save(User.create("user@copa.com", "encoded-password", "코파", "010-1234-5678"));
   }
 
   @Test

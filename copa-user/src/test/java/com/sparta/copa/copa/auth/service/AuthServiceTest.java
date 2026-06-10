@@ -43,7 +43,7 @@ class AuthServiceTest {
   private AuthService authService;
 
   private User userWithId(Long id) {
-    User user = User.create("user@copa.com", "encoded-password", "코파");
+    User user = User.create("user@copa.com", "encoded-password", "코파", "010-1234-5678");
     ReflectionTestUtils.setField(user, "id", id);
     return user;
   }
@@ -52,16 +52,16 @@ class AuthServiceTest {
   @DisplayName("회원가입 시 비밀번호를 인코딩해 UserService에 위임하고 사용자 정보를 반환한다")
   void signupSuccess() {
     SignUpRequest request = SignUpRequest.builder()
-        .email("user@copa.com").password("password123").name("코파").build();
-    given(passwordEncoder.encode("password123")).willReturn("encoded-password");
-    given(userService.register("user@copa.com", "encoded-password", "코파"))
+        .email("user@copa.com").password("password123!").name("코파").phone("010-1234-5678").build();
+    given(passwordEncoder.encode("password123!")).willReturn("encoded-password");
+    given(userService.register("user@copa.com", "encoded-password", "코파", "010-1234-5678"))
         .willReturn(userWithId(1L));
 
     UserResponse response = authService.signup(request);
 
     assertThat(response.getEmail()).isEqualTo("user@copa.com");
-    verify(passwordEncoder).encode("password123");
-    verify(userService).register("user@copa.com", "encoded-password", "코파");
+    verify(passwordEncoder).encode("password123!");
+    verify(userService).register("user@copa.com", "encoded-password", "코파", "010-1234-5678");
   }
 
   @Test

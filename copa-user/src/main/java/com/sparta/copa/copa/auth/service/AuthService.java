@@ -26,7 +26,8 @@ public class AuthService {
   // BCrypt 해싱은 비용이 크므로 트랜잭션 밖에서 처리하고, 영속화는 UserService에 위임한다.
   public UserResponse signup(SignUpRequest request) {
     String encodedPassword = passwordEncoder.encode(request.getPassword());
-    User saved = userService.register(request.getEmail(), encodedPassword, request.getName());
+    User saved = userService.register(
+        request.getEmail(), encodedPassword, request.getName(), request.getPhone());
     return UserResponse.from(saved);
   }
 
@@ -36,6 +37,9 @@ public class AuthService {
         .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
     if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
       throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+    }
+    if (!user.getIsActive()) {
+      throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
     }
     return issueTokens(user);
   }

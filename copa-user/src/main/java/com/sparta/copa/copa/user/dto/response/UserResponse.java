@@ -12,6 +12,7 @@ public class UserResponse {
   private final Long id;
   private final String email;
   private final String name;
+  private final String phone;
   private final UserRole role;
 
   public static UserResponse from(User user) {
@@ -19,6 +20,7 @@ public class UserResponse {
         .id(user.getId())
         .email(user.getEmail())
         .name(user.getName())
+        .phone(user.getPhone())
         .role(user.getRole())
         .build();
   }

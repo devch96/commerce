@@ -1,3 +1,11 @@
+server:
+  port: 8082
+
 spring:
   application:
     name: copa-product
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/copa_product}
+      # @Indexed 기반 인덱스(productCode 유니크, category)를 애플리케이션 기동 시 생성한다.
+      auto-index-creation: true

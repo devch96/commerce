@@ -14,6 +14,9 @@ public class RouteConfig {
         .route("copa-user", route -> route
             .path("/auth/**", "/users/**")
             .uri(properties.getAuthServiceUri().toString()))
+        .route("copa-product", route -> route
+            .path("/products/**", "/categories/**")
+            .uri(properties.getProductServiceUri().toString()))
         .build();
   }
 }

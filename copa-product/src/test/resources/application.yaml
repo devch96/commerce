@@ -1,0 +1,6 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/copa_product_test
+      # 테스트 컨텍스트 로딩 시 MongoDB로 연결을 시도하지 않도록 자동 인덱스 생성을 끈다.
+      auto-index-creation: false

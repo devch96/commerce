@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,12 +27,14 @@ class UserServiceTest {
 
   @Mock
   private UserRepository userRepository;
+  @Mock
+  private PasswordEncoder passwordEncoder;
 
   @InjectMocks
   private UserService userService;
 
   private User userWithId(Long id) {
-    User user = User.create("user@copa.com", "encoded-password", "코파");
+    User user = User.create("user@copa.com", "encoded-password", "코파", "010-1234-5678");
     ReflectionTestUtils.setField(user, "id", id);
     return user;
   }
@@ -42,7 +45,7 @@ class UserServiceTest {
     given(userRepository.existsByEmail("user@copa.com")).willReturn(false);
     given(userRepository.save(any(User.class))).willReturn(userWithId(1L));
 
-    User saved = userService.register("user@copa.com", "encoded-password", "코파");
+    User saved = userService.register("user@copa.com", "encoded-password", "코파", "010-1234-5678");
 
     assertThat(saved.getId()).isEqualTo(1L);
     verify(userRepository).save(any(User.class));
@@ -53,7 +56,8 @@ class UserServiceTest {
   void registerDuplicateEmail() {
     given(userRepository.existsByEmail("user@copa.com")).willReturn(true);
 
-    assertThatThrownBy(() -> userService.register("user@copa.com", "encoded-password", "코파"))
+    assertThatThrownBy(
+        () -> userService.register("user@copa.com", "encoded-password", "코파", "010-1234-5678"))
         .isInstanceOf(BusinessException.class)
         .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS);
     verify(userRepository, never()).save(any());

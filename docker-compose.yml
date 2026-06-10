@@ -1,5 +1,5 @@
 # MSA 공통 인프라 (13주차 1일차 STEP2 - MSA 공통 준비)
-# 회원·인증 서비스(copa-user)용 MySQL · Redis.
+# 회원·인증 서비스(copa-user)용 MySQL · Redis, 상품 서비스(copa-product)용 MySQL.
 # Kafka는 주문 Saga 단계(15주차)에서 추가한다.
 
 services:
@@ -39,6 +39,22 @@ services:
       timeout: 5s
       retries: 5
 
+  copa-product-mongo:
+    image: mongo:7.0
+    container_name: copa-product-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      TZ: Asia/Seoul
+    volumes:
+      - copa-product-mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   copa-auth-mysql-data:
   copa-auth-redis-data:
+  copa-product-mongo-data:

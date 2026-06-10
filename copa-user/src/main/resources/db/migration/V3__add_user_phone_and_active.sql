@@ -1,0 +1,3 @@
+ALTER TABLE users
+    ADD COLUMN phone     VARCHAR(20) NOT NULL,
+    ADD COLUMN is_active BIT(1)      NOT NULL DEFAULT b'1';

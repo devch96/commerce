@@ -40,7 +40,7 @@ class AuthControllerTest {
   @DisplayName("POST /auth/signup - 가입 성공 시 201과 사용자 정보를 반환한다")
   void signup() throws Exception {
     SignUpRequest request = SignUpRequest.builder()
-        .email("user@copa.com").password("password123").name("코파").build();
+        .email("user@copa.com").password("password123!").name("코파").phone("010-1234-5678").build();
     given(authService.signup(any(SignUpRequest.class))).willReturn(
         UserResponse.builder().id(1L).email("user@copa.com").name("코파").role(UserRole.USER).build());
 

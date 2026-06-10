@@ -13,6 +13,7 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -41,7 +42,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     ServerWebExchange sanitized = stripTrustedHeaders(exchange);
     ServerHttpRequest request = sanitized.getRequest();
 
-    if (isWhitelisted(request.getURI().getPath())) {
+    if (isWhitelisted(request.getMethod(), request.getURI().getPath())) {
       return chain.filter(sanitized);
     }
 
@@ -74,9 +75,23 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     return exchange.mutate().request(request).build();
   }
 
-  private boolean isWhitelisted(String path) {
-    return gatewayProperties.getWhitelist().stream()
-        .anyMatch(pattern -> pathMatcher.match(pattern, path));
+  // 화이트리스트 항목은 "GET /products/**"처럼 메서드를 앞에 붙여 메서드별로 공개할 수 있다.
+  // (예: 상품 조회는 비로그인 공개, 등록/수정/삭제는 인증 필요) 메서드 없이 경로만 적으면 모든 메서드에 공개.
+  private boolean isWhitelisted(HttpMethod method, String path) {
+    for (String entry : gatewayProperties.getWhitelist()) {
+      int space = entry.indexOf(' ');
+      if (space > 0) {
+        String allowedMethod = entry.substring(0, space);
+        String pattern = entry.substring(space + 1).trim();
+        if (method != null && method.name().equalsIgnoreCase(allowedMethod)
+            && pathMatcher.match(pattern, path)) {
+          return true;
+        }
+      } else if (pathMatcher.match(entry, path)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private Optional<String> resolveToken(ServerHttpRequest request) {

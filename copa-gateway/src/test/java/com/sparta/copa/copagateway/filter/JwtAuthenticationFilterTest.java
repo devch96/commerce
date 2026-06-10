@@ -40,7 +40,8 @@ class JwtAuthenticationFilterTest {
     JwtProvider jwtProvider = new JwtProvider(new JwtProperties(SECRET));
     GatewayProperties gatewayProperties = new GatewayProperties(
         URI.create("http://localhost:8081"),
-        List.of("/auth/login", "/auth/signup", "/auth/reissue"));
+        URI.create("http://localhost:8082"),
+        List.of("/auth/login", "/auth/signup", "/auth/reissue", "GET /products", "GET /products/**"));
     this.filter = new JwtAuthenticationFilter(jwtProvider, gatewayProperties);
   }
 
@@ -126,6 +127,32 @@ class JwtAuthenticationFilterTest {
     HttpHeaders forwarded = chain.capturedRequestHeaders();
     assertThat(forwarded.getFirst(USER_ID_HEADER)).isEqualTo("42");
     assertThat(forwarded.getFirst(USER_ROLE_HEADER)).isEqualTo("USER");
+  }
+
+  @Test
+  @DisplayName("상품 조회(GET /products)는 토큰 없이도 통과시킨다")
+  void productReadIsPublic() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.get("/products/123"));
+    CapturingChain chain = capturingChain();
+
+    StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+    assertThat(chain.wasCalled()).isTrue();
+    assertThat(exchange.getResponse().getStatusCode()).isNull();
+  }
+
+  @Test
+  @DisplayName("상품 등록(POST /products)은 메서드가 달라 화이트리스트에 걸리지 않고, 토큰 없으면 401")
+  void productWriteRequiresToken() {
+    MockServerWebExchange exchange = MockServerWebExchange.from(
+        MockServerHttpRequest.post("/products"));
+    CapturingChain chain = capturingChain();
+
+    StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+    assertThat(chain.wasCalled()).isFalse();
+    assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
   }
 
   @Test

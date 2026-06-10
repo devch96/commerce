@@ -10,10 +10,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class GatewayProperties {
 
   private final URI authServiceUri;
+  private final URI productServiceUri;
   private final List<String> whitelist;
 
-  public GatewayProperties(URI authServiceUri, List<String> whitelist) {
+  public GatewayProperties(URI authServiceUri, URI productServiceUri, List<String> whitelist) {
     this.authServiceUri = authServiceUri;
+    this.productServiceUri = productServiceUri;
     this.whitelist = whitelist == null ? List.of() : List.copyOf(whitelist);
   }
 }

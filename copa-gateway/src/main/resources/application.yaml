@@ -10,7 +10,15 @@ jwt:
 
 gateway:
   auth-service-uri: ${AUTH_SERVICE_URI:http://localhost:8081}
+  product-service-uri: ${PRODUCT_SERVICE_URI:http://localhost:8082}
+  # 'METHOD path' 형식이면 해당 메서드에만 공개, 경로만 적으면 모든 메서드에 공개한다.
+  # 상품 조회는 비로그인 공개(인증은 주문 단계부터). 등록/수정/삭제(POST/PUT/DELETE)는
+  # 인증을 거쳐 X-User-Role이 주입되고 copa-product에서 ADMIN 권한을 재검증한다.
   whitelist:
     - /auth/signup
     - /auth/login
     - /auth/reissue
+    - GET /products
+    - GET /products/**
+    - GET /categories
+    - GET /categories/**
