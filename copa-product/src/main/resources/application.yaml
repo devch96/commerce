@@ -9,3 +9,7 @@ spring:
       uri: ${MONGODB_URI:mongodb://localhost:27017/copa_product}
       # @Indexed 기반 인덱스(productCode 유니크, category)를 애플리케이션 기동 시 생성한다.
       auto-index-creation: true
+    redis:
+      # 상품 상세 조회 Look-Aside 캐시 전용. copa-auth-redis(6379)와 분리.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}

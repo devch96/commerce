@@ -93,6 +93,7 @@ docker compose up -d
 - `copa-auth-mysql`: 3306, db=`copa_auth`, user=`copa`/`copa` (root=`root`)
 - `copa-auth-redis`: 6379 (appendonly)
 - `copa-product-mongo`: 27017, db=`copa_product` (인증 없음, 로컬 개발용)
+- `copa-product-redis`: 6380→6379 (상품 상세 조회 Look-Aside 캐시 전용)
 - Kafka(주문 Saga)는 15주차에 추가 예정.
 
 > 참고: `.clauderules`는 PostgreSQL을 명시하지만 설계 문서와 실제 인프라(`docker-compose.yml`)는

@@ -31,6 +31,8 @@ class ProductServiceTest {
   private ProductRepository productRepository;
   @Mock
   private CategoryService categoryService;
+  @Mock
+  private ProductCacheService productCacheService;
 
   @InjectMocks
   private ProductService productService;
@@ -74,5 +76,29 @@ class ProductServiceTest {
     ProductResponse response = productService.updateProduct("p1", 999L, true, updateRequest());
 
     assertThat(response.getName()).isEqualTo("수정상품");
+  }
+
+  @Test
+  @DisplayName("캐시 HIT이면 DB를 조회하지 않고 캐시 값을 반환한다")
+  void getProductCacheHit() {
+    given(productCacheService.find("p1"))
+        .willReturn(Optional.of(ProductResponse.from(productOwnedBy(1L))));
+
+    ProductResponse response = productService.getProduct("p1");
+
+    assertThat(response.getName()).isEqualTo("기존상품");
+    verify(productRepository, never()).findById(any());
+  }
+
+  @Test
+  @DisplayName("캐시 MISS이면 DB 조회 후 캐시에 적재한다")
+  void getProductCacheMiss() {
+    given(productCacheService.find("p1")).willReturn(Optional.empty());
+    given(productRepository.findById("p1")).willReturn(Optional.of(productOwnedBy(1L)));
+
+    ProductResponse response = productService.getProduct("p1");
+
+    assertThat(response.getName()).isEqualTo("기존상품");
+    verify(productCacheService).put(any(ProductResponse.class));
   }
 }

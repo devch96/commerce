@@ -7,9 +7,12 @@ import java.util.List;
 import java.util.Map;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.extern.jackson.Jacksonized;
 
+// @Jacksonized: Redis 캐시 JSON → ProductResponse 역직렬화를 위해 빌더를 Jackson이 쓸 수 있게 한다.
 @Getter
 @Builder
+@Jacksonized
 public class ProductResponse {
 
   private final String id;

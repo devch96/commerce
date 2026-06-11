@@ -16,6 +16,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -24,6 +26,7 @@ public class ProductService {
 
   private final ProductRepository productRepository;
   private final CategoryService categoryService;
+  private final ProductCacheService productCacheService;
 
   @Transactional
   public ProductResponse createProduct(Long sellerId, ProductCreateRequest request) {
@@ -49,9 +52,15 @@ public class ProductService {
     return products.map(ProductResponse::from);
   }
 
+  // Look-Aside: 캐시 HIT이면 그대로, MISS면 DB 조회 후 캐시에 적재한다.
   @Transactional(readOnly = true)
   public ProductResponse getProduct(String productId) {
-    return ProductResponse.from(getById(productId));
+    return productCacheService.find(productId)
+        .orElseGet(() -> {
+          ProductResponse response = ProductResponse.from(getById(productId));
+          productCacheService.put(response);
+          return response;
+        });
   }
 
   @Transactional
@@ -71,6 +80,7 @@ public class ProductService {
     if (request.getStatus() != null) {
       product.changeStatus(request.getStatus());
     }
+    evictCacheAfterCommit(productId);
     return ProductResponse.from(product);
   }
 
@@ -79,6 +89,22 @@ public class ProductService {
     Product product = getById(productId);
     checkModifiable(product, userId, isAdmin);
     productRepository.delete(product);
+    evictCacheAfterCommit(productId);
+  }
+
+  // 캐시 무효화는 DB 커밋이 끝난 뒤 수행한다. 커밋 전에 지우면 그 틈의 조회가 옛 값을
+  // 다시 적재해 stale이 남을 수 있기 때문. (트랜잭션이 없으면 즉시 삭제)
+  private void evictCacheAfterCommit(String productId) {
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+      TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+        @Override
+        public void afterCommit() {
+          productCacheService.evict(productId);
+        }
+      });
+    } else {
+      productCacheService.evict(productId);
+    }
   }
 
   // 등록한 판매자 본인 또는 ADMIN만 수정/삭제할 수 있다.

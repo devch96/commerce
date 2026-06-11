@@ -54,7 +54,23 @@ services:
       timeout: 5s
       retries: 5
 
+  copa-product-redis:
+    image: redis:7.2
+    container_name: copa-product-redis
+    # copa-auth-redis(6379)와 호스트 포트 충돌을 피하려 6380으로 매핑한다. 상품 상세 조회 캐시 전용.
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - copa-product-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   copa-auth-mysql-data:
   copa-auth-redis-data:
   copa-product-mongo-data:
+  copa-product-redis-data:
