@@ -1,11 +1,11 @@
 package com.sparta.copa.copaproduct.category.repository;
 
 import com.sparta.copa.copaproduct.category.domain.Category;
-import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface CategoryRepository extends MongoRepository<Category, String> {
+public interface CategoryRepository extends JpaRepository<Category, Long> {
 
-  boolean existsByParentId(String parentId);
+  boolean existsByParentId(Long parentId);
 
-  boolean existsByParentIdAndName(String parentId, String name);
+  boolean existsByParentIdAndName(Long parentId, String name);
 }

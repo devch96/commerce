@@ -13,7 +13,9 @@ import com.sparta.copa.copaproduct.common.exception.ErrorCode;
 import com.sparta.copa.copaproduct.product.domain.Product;
 import com.sparta.copa.copaproduct.product.dto.request.ProductUpdateRequest;
 import com.sparta.copa.copaproduct.product.dto.response.ProductResponse;
+import com.sparta.copa.copaproduct.product.repository.ProductCategoryRepository;
 import com.sparta.copa.copaproduct.product.repository.ProductRepository;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,6 +32,8 @@ class ProductServiceTest {
   @Mock
   private ProductRepository productRepository;
   @Mock
+  private ProductCategoryRepository productCategoryRepository;
+  @Mock
   private CategoryService categoryService;
   @Mock
   private ProductCacheService productCacheService;
@@ -38,21 +42,22 @@ class ProductServiceTest {
   private ProductService productService;
 
   private Product productOwnedBy(Long sellerId) {
-    return Product.create(sellerId, "PROD-2026-x", "기존상품", 1000L, List.of("c1"), List.of("c1"),
-        10, "설명", Map.of());
+    return Product.create(sellerId, "PROD-2026-x", "기존상품", BigDecimal.valueOf(1000),
+        10, "설명", List.of("https://img/1.jpg"), Map.of());
   }
 
   private ProductUpdateRequest updateRequest() {
     return ProductUpdateRequest.builder()
-        .name("수정상품").price(2000L).categoryIds(List.of("c1")).stockQuantity(5).build();
+        .name("수정상품").price(BigDecimal.valueOf(2000)).categoryIds(List.of(1L)).stockQuantity(5)
+        .build();
   }
 
   @Test
   @DisplayName("등록한 판매자 본인은 상품을 수정할 수 있다")
   void ownerCanUpdate() {
-    given(productRepository.findById("p1")).willReturn(Optional.of(productOwnedBy(1L)));
+    given(productRepository.findById(10L)).willReturn(Optional.of(productOwnedBy(1L)));
 
-    ProductResponse response = productService.updateProduct("p1", 1L, false, updateRequest());
+    ProductResponse response = productService.updateProduct(10L, 1L, false, updateRequest());
 
     assertThat(response.getName()).isEqualTo("수정상품");
   }
@@ -60,20 +65,20 @@ class ProductServiceTest {
   @Test
   @DisplayName("소유자가 아닌 판매자는 상품을 수정할 수 없다")
   void nonOwnerCannotUpdate() {
-    given(productRepository.findById("p1")).willReturn(Optional.of(productOwnedBy(1L)));
+    given(productRepository.findById(10L)).willReturn(Optional.of(productOwnedBy(1L)));
 
-    assertThatThrownBy(() -> productService.updateProduct("p1", 2L, false, updateRequest()))
+    assertThatThrownBy(() -> productService.updateProduct(10L, 2L, false, updateRequest()))
         .isInstanceOf(BusinessException.class)
         .extracting("errorCode").isEqualTo(ErrorCode.ACCESS_DENIED);
-    verify(categoryService, never()).expandWithAncestors(any());
+    verify(categoryService, never()).getAllByIds(any());
   }
 
   @Test
   @DisplayName("ADMIN은 소유자가 아니어도 상품을 수정할 수 있다")
   void adminCanUpdateOthersProduct() {
-    given(productRepository.findById("p1")).willReturn(Optional.of(productOwnedBy(1L)));
+    given(productRepository.findById(10L)).willReturn(Optional.of(productOwnedBy(1L)));
 
-    ProductResponse response = productService.updateProduct("p1", 999L, true, updateRequest());
+    ProductResponse response = productService.updateProduct(10L, 999L, true, updateRequest());
 
     assertThat(response.getName()).isEqualTo("수정상품");
   }
@@ -81,10 +86,10 @@ class ProductServiceTest {
   @Test
   @DisplayName("캐시 HIT이면 DB를 조회하지 않고 캐시 값을 반환한다")
   void getProductCacheHit() {
-    given(productCacheService.find("p1"))
-        .willReturn(Optional.of(ProductResponse.from(productOwnedBy(1L))));
+    given(productCacheService.find(10L))
+        .willReturn(Optional.of(ProductResponse.from(productOwnedBy(1L), List.of())));
 
-    ProductResponse response = productService.getProduct("p1");
+    ProductResponse response = productService.getProduct(10L);
 
     assertThat(response.getName()).isEqualTo("기존상품");
     verify(productRepository, never()).findById(any());
@@ -93,10 +98,10 @@ class ProductServiceTest {
   @Test
   @DisplayName("캐시 MISS이면 DB 조회 후 캐시에 적재한다")
   void getProductCacheMiss() {
-    given(productCacheService.find("p1")).willReturn(Optional.empty());
-    given(productRepository.findById("p1")).willReturn(Optional.of(productOwnedBy(1L)));
+    given(productCacheService.find(10L)).willReturn(Optional.empty());
+    given(productRepository.findById(10L)).willReturn(Optional.of(productOwnedBy(1L)));
 
-    ProductResponse response = productService.getProduct("p1");
+    ProductResponse response = productService.getProduct(10L);
 
     assertThat(response.getName()).isEqualTo("기존상품");
     verify(productCacheService).put(any(ProductResponse.class));

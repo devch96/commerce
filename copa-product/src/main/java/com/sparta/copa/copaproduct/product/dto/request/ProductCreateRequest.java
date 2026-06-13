@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import lombok.AccessLevel;
@@ -25,10 +26,10 @@ public class ProductCreateRequest {
 
   @NotNull
   @PositiveOrZero
-  private Long price;
+  private BigDecimal price;
 
   @NotEmpty
-  private List<String> categoryIds;
+  private List<Long> categoryIds;
 
   @NotNull
   @PositiveOrZero
@@ -36,6 +37,9 @@ public class ProductCreateRequest {
 
   @Size(max = 2000)
   private String description;
+
+  // 상품 이미지 URL 목록(선택). 대표 이미지는 첫 번째 관례.
+  private List<String> images;
 
   private Map<String, String> specs;
 }

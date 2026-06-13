@@ -40,13 +40,13 @@ public class ProductController {
   // 상품 조회는 비로그인 공개.
   @GetMapping
   public ApiResponse<Page<ProductResponse>> getProducts(
-      @RequestParam(required = false) String categoryId,
+      @RequestParam(required = false) Long categoryId,
       @PageableDefault(size = 20) Pageable pageable) {
     return ApiResponse.success(productService.getProducts(categoryId, pageable));
   }
 
   @GetMapping("/{productId}")
-  public ApiResponse<ProductResponse> getProduct(@PathVariable String productId) {
+  public ApiResponse<ProductResponse> getProduct(@PathVariable Long productId) {
     return ApiResponse.success(productService.getProduct(productId));
   }
 
@@ -65,7 +65,7 @@ public class ProductController {
   public ApiResponse<ProductResponse> update(
       @RequestHeader(value = USER_ID_HEADER, required = false) Long userId,
       @RequestHeader(value = USER_ROLE_HEADER, required = false) String role,
-      @PathVariable String productId,
+      @PathVariable Long productId,
       @Valid @RequestBody ProductUpdateRequest request) {
     requireSeller(role);
     return ApiResponse.success(
@@ -77,7 +77,7 @@ public class ProductController {
   public void delete(
       @RequestHeader(value = USER_ID_HEADER, required = false) Long userId,
       @RequestHeader(value = USER_ROLE_HEADER, required = false) String role,
-      @PathVariable String productId) {
+      @PathVariable Long productId) {
     requireSeller(role);
     productService.deleteProduct(productId, userId, isAdmin(role));
   }

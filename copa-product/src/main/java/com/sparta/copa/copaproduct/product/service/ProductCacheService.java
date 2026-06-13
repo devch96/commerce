@@ -25,7 +25,7 @@ public class ProductCacheService {
   private final StringRedisTemplate redisTemplate;
   private final ObjectMapper objectMapper;
 
-  public Optional<ProductResponse> find(String productId) {
+  public Optional<ProductResponse> find(Long productId) {
     String json = redisTemplate.opsForValue().get(key(productId));
     if (json == null) {
       return Optional.empty();
@@ -48,11 +48,11 @@ public class ProductCacheService {
     }
   }
 
-  public void evict(String productId) {
+  public void evict(Long productId) {
     redisTemplate.delete(key(productId));
   }
 
-  private String key(String productId) {
+  private String key(Long productId) {
     return KEY_PREFIX + productId;
   }
 }

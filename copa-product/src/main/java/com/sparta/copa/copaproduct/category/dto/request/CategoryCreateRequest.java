@@ -19,5 +19,5 @@ public class CategoryCreateRequest {
   private String name;
 
   // null이면 최상위 카테고리.
-  private String parentId;
+  private Long parentId;
 }

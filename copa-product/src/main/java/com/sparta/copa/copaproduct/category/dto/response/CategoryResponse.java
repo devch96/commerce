@@ -9,9 +9,9 @@ import lombok.Getter;
 @Builder
 public class CategoryResponse {
 
-  private final String id;
+  private final Long id;
   private final String name;
-  private final String parentId;
+  private final Long parentId;
   private final List<CategoryResponse> children;
 
   public static CategoryResponse of(Category category, List<CategoryResponse> children) {

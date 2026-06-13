@@ -51,7 +51,7 @@ public class CategoryController {
   @PutMapping("/{categoryId}")
   public ApiResponse<CategoryResponse> update(
       @RequestHeader(value = USER_ROLE_HEADER, required = false) String role,
-      @PathVariable String categoryId,
+      @PathVariable Long categoryId,
       @Valid @RequestBody CategoryUpdateRequest request) {
     verifyAdmin(role);
     return ApiResponse.success(
@@ -62,7 +62,7 @@ public class CategoryController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(
       @RequestHeader(value = USER_ROLE_HEADER, required = false) String role,
-      @PathVariable String categoryId) {
+      @PathVariable Long categoryId) {
     verifyAdmin(role);
     categoryService.delete(categoryId);
   }

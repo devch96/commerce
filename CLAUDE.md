@@ -57,8 +57,8 @@
   (`src/test/resources/application.yaml`)에서 `spring.flyway.enabled: false` +
   `spring.jpa.hibernate.ddl-auto: create-drop`로 두어 Hibernate가 H2 스키마를 만들게 한다.
 - `copa-gateway`는 WebFlux 라우터로 DB가 없어 위 규칙이 적용되지 않는다.
-- `copa-product`는 **MongoDB**(스키마리스)를 쓰므로 Flyway/DDL 규칙이 적용되지 않는다. 인덱스는
-  엔티티의 `@Indexed` + `spring.data.mongodb.auto-index-creation`으로 관리한다.
+- `copa-product`도 **MySQL + Flyway**를 쓴다(위 규칙 동일). 컬렉션/Map 필드(categoryIds·images·specs 등)는
+  `@ElementCollection` 값 테이블로 매핑하고, 상품 상세 조회 캐시는 별도 Redis(`copa-product-redis`)를 쓴다.
 
 ## 모듈 구성
 
@@ -79,12 +79,13 @@
   `/internal/**`은 게이트웨이를 거치지 않는 서비스 간 내부 API.
 - **`copa-product`**: 상품 CRUD·목록 조회. 상품 조회(`GET /products/**`)는 비로그인 공개(인증은 주문 단계부터),
   등록/수정/삭제는 게이트웨이가 주입한 `X-User-Role`로 ADMIN 권한을 한 번 더 검증(방어적 설계).
-  DB는 **MongoDB**(`copa-product-mongo`) — 상품 종류별로 다른 유연한 스펙(`specs`)을 문서로 저장한다.
+  DB는 **MySQL**(`copa-product-mysql`) + Flyway, 상품 상세 조회는 Redis Look-Aside 캐시. 장바구니(`/cart`)도 이 서비스가 담당.
+  상품 삭제는 물리 삭제가 아니라 **soft delete**(`deleted` 플래그)로 처리한다.
 - 게이트웨이 화이트리스트는 `GET /products`처럼 `METHOD path` 형식으로 메서드별 공개를 지정할 수 있다(메서드 생략 시 전체 공개).
 
 ## 인프라
 
-`docker-compose.yml` — 회원·인증(`copa-user`)용 MySQL 8.0 + Redis 7.2, 상품(`copa-product`)용 MongoDB 7.0.
+`docker-compose.yml` — 회원·인증(`copa-user`)용 MySQL 8.0 + Redis 7.2, 상품(`copa-product`)용 MySQL 8.0 + Redis 7.2(조회 캐시).
 
 ```bash
 docker compose up -d
@@ -92,7 +93,7 @@ docker compose up -d
 
 - `copa-auth-mysql`: 3306, db=`copa_auth`, user=`copa`/`copa` (root=`root`)
 - `copa-auth-redis`: 6379 (appendonly)
-- `copa-product-mongo`: 27017, db=`copa_product` (인증 없음, 로컬 개발용)
+- `copa-product-mysql`: 3307→3306, db=`copa_product`, user=`copa`/`copa` (root=`root`)
 - `copa-product-redis`: 6380→6379 (상품 상세 조회 Look-Aside 캐시 전용)
 - Kafka(주문 Saga)는 15주차에 추가 예정.
 

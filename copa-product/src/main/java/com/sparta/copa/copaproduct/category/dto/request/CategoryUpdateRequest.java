@@ -19,5 +19,5 @@ public class CategoryUpdateRequest {
   private String name;
 
   // 지정 시 해당 부모로 이동(null이면 최상위로 이동).
-  private String parentId;
+  private Long parentId;
 }

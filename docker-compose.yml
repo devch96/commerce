@@ -39,17 +39,25 @@ services:
       timeout: 5s
       retries: 5
 
-  copa-product-mongo:
-    image: mongo:7.0
-    container_name: copa-product-mongo
+  copa-product-mysql:
+    image: mysql:8.0
+    container_name: copa-product-mysql
+    # copa-auth-mysql(3306)과 호스트 포트 충돌을 피하려 3307로 매핑한다.
     ports:
-      - "27017:27017"
+      - "3307:3306"
     environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: copa_product
+      MYSQL_USER: copa
+      MYSQL_PASSWORD: copa
       TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
     volumes:
-      - copa-product-mongo-data:/data/db
+      - copa-product-mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,5 +80,5 @@ services:
 volumes:
   copa-auth-mysql-data:
   copa-auth-redis-data:
-  copa-product-mongo-data:
+  copa-product-mysql-data:
   copa-product-redis-data:

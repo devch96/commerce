@@ -15,6 +15,8 @@ public enum ErrorCode {
   CATEGORY_HAS_CHILDREN(HttpStatus.BAD_REQUEST, "하위 카테고리가 있어 삭제할 수 없습니다."),
   CATEGORY_CYCLE(HttpStatus.BAD_REQUEST, "카테고리를 자기 자신 또는 하위로 이동할 수 없습니다."),
   INVALID_CATEGORY(HttpStatus.BAD_REQUEST, "존재하지 않는 카테고리가 포함되어 있습니다."),
+  PRODUCT_NOT_PURCHASABLE(HttpStatus.BAD_REQUEST, "현재 판매 중인 상품이 아닙니다."),
+  CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니에 해당 상품이 없습니다."),
   ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 작업을 수행할 권한이 없습니다.");
 
   private final HttpStatus status;
