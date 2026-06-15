@@ -14,7 +14,8 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
       + " where ci.userId = :userId order by ci.addedAt asc")
   List<CartItem> findWithProductByUserId(@Param("userId") Long userId);
 
-  Optional<CartItem> findByUserIdAndProduct_Id(Long userId, Long productId);
+  Optional<CartItem> findByUserIdAndProduct_IdAndOptionKey(
+      Long userId, Long productId, String optionKey);
 
   void deleteByUserId(Long userId);
 }

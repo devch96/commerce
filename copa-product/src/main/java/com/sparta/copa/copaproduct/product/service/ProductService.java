@@ -8,6 +8,7 @@ import com.sparta.copa.copaproduct.product.domain.Product;
 import com.sparta.copa.copaproduct.product.domain.ProductCategory;
 import com.sparta.copa.copaproduct.product.dto.request.ProductCreateRequest;
 import com.sparta.copa.copaproduct.product.dto.request.ProductUpdateRequest;
+import com.sparta.copa.copaproduct.product.dto.response.OptionPriceResponse;
 import com.sparta.copa.copaproduct.product.dto.response.ProductResponse;
 import com.sparta.copa.copaproduct.product.repository.ProductCategoryRepository;
 import com.sparta.copa.copaproduct.product.repository.ProductRepository;
@@ -45,7 +46,9 @@ public class ProductService {
         request.getStockQuantity(),
         request.getDescription(),
         request.getImages(),
-        request.getSpecs()));
+        request.getSpecs(),
+        request.getOptions(),
+        request.getOptionDiscounts()));
     linkCategories(product, categories);
     return ProductResponse.from(product, request.getCategoryIds());
   }
@@ -75,6 +78,14 @@ public class ProductService {
         });
   }
 
+  // 서비스 간 연결점: 주문이 옵션 가격을 스냅샷하거나 재고 서비스가 재고를 시드할 때 쓴다.
+  // 실제 재고 차감/예약은 재고 서비스 소관이며, 여기선 선언적 재고와 할인 적용가만 돌려준다.
+  @Transactional(readOnly = true)
+  public OptionPriceResponse resolveOptionPrice(Long productId, String optionKey) {
+    Product product = getById(productId);
+    return OptionPriceResponse.from(product.resolveOption(optionKey));
+  }
+
   @Transactional
   public ProductResponse updateProduct(Long productId, Long userId, boolean isAdmin,
       ProductUpdateRequest request) {
@@ -87,7 +98,9 @@ public class ProductService {
         request.getStockQuantity(),
         request.getDescription(),
         request.getImages(),
-        request.getSpecs());
+        request.getSpecs(),
+        request.getOptions(),
+        request.getOptionDiscounts());
     if (request.getStatus() != null) {
       product.changeStatus(request.getStatus());
     }

@@ -14,6 +14,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UpdateCartItemRequest {
 
+  // 변경 대상 옵션 경로. 옵션 없는 상품은 생략.
+  private String optionKey;
+
   @NotNull
   @Min(1)
   private Integer quantity;

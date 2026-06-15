@@ -43,7 +43,7 @@ class ProductServiceTest {
 
   private Product productOwnedBy(Long sellerId) {
     return Product.create(sellerId, "PROD-2026-x", "기존상품", BigDecimal.valueOf(1000),
-        10, "설명", List.of("https://img/1.jpg"), Map.of());
+        10, "설명", List.of("https://img/1.jpg"), Map.of(), null, null);
   }
 
   private ProductUpdateRequest updateRequest() {

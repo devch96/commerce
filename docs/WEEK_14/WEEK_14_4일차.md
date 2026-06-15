@@ -1,4 +1,4 @@
-# 13주차 4일차 — 상품 상세 조회 Look-Aside 캐시
+# 14주차 4일차 — 상품 상세 조회 Look-Aside 캐시
 
 > copa-product의 상품 상세 조회에 Redis Look-Aside 캐시를 도입(1차).
 

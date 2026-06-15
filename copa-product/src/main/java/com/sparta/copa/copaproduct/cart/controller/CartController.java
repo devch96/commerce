@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,22 +38,25 @@ public class CartController {
   @PostMapping("/items")
   public ApiResponse<CartResponse> addItem(@RequestHeader(USER_ID_HEADER) Long userId,
       @Valid @RequestBody AddCartItemRequest request) {
-    cartService.addItem(userId, request.getProductId(), request.getQuantity());
+    cartService.addItem(userId, request.getProductId(), request.getOptionKey(),
+        request.getQuantity());
     return ApiResponse.success(cartService.getCart(userId));
   }
 
   @PatchMapping("/items/{productId}")
   public ApiResponse<CartResponse> changeQuantity(@RequestHeader(USER_ID_HEADER) Long userId,
       @PathVariable Long productId, @Valid @RequestBody UpdateCartItemRequest request) {
-    cartService.changeQuantity(userId, productId, request.getQuantity());
+    cartService.changeQuantity(userId, productId, request.getOptionKey(), request.getQuantity());
     return ApiResponse.success(cartService.getCart(userId));
   }
 
+  // 옵션 상품은 어떤 옵션 행을 지울지 optionKey로 지정한다(옵션 없는 상품은 생략).
   @DeleteMapping("/items/{productId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void removeItem(@RequestHeader(USER_ID_HEADER) Long userId,
-      @PathVariable Long productId) {
-    cartService.removeItem(userId, productId);
+      @PathVariable Long productId,
+      @RequestParam(required = false) String optionKey) {
+    cartService.removeItem(userId, productId, optionKey);
   }
 
   @DeleteMapping

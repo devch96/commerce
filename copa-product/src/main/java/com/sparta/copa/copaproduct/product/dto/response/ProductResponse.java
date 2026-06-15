@@ -1,6 +1,7 @@
 package com.sparta.copa.copaproduct.product.dto.response;
 
 import com.sparta.copa.copaproduct.common.enums.ProductStatus;
+import com.sparta.copa.copaproduct.product.domain.OptionDiscount;
 import com.sparta.copa.copaproduct.product.domain.Product;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,6 +28,9 @@ public class ProductResponse {
   private final String description;
   private final List<String> images;
   private final Map<String, String> specs;
+  // 옵션(무한 뎁스 JSON 트리, leaf = 선언적 재고)과 옵션 할인 규칙.
+  private final Map<String, Object> options;
+  private final List<OptionDiscount> optionDiscounts;
   private final LocalDateTime createdAt;
   private final LocalDateTime updatedAt;
 
@@ -44,6 +48,8 @@ public class ProductResponse {
         .description(product.getDescription())
         .images(product.getImages())
         .specs(product.getSpecs())
+        .options(product.getOptions())
+        .optionDiscounts(product.getOptionDiscounts())
         .createdAt(product.getCreatedAt())
         .updatedAt(product.getUpdatedAt())
         .build();

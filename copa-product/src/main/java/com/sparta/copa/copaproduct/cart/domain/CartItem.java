@@ -21,7 +21,7 @@ import org.hibernate.annotations.DynamicUpdate;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-// 회원 장바구니 항목. 한 회원의 같은 상품은 한 행(수량 누적). 상품은 다대일 단방향(@ManyToOne)으로 참조.
+// 회원 장바구니 항목. 한 회원의 같은 상품·옵션은 한 행(수량 누적). 상품은 다대일 단방향(@ManyToOne)으로 참조.
 @Entity
 @Getter
 @Table(name = "cart_items")
@@ -43,6 +43,11 @@ public class CartItem {
   @JoinColumn(name = "product_id", nullable = false)
   private Product product;
 
+  // 선택한 옵션 경로(예: 색상:네이비/사이즈:M). 옵션 없는 상품은 빈 문자열("").
+  // 빈 문자열을 쓰는 이유: 유니크 (user_id, product_id, option_key)에서 NULL은 중복 허용이라 누적이 깨진다.
+  @Column(name = "option_key", nullable = false, length = 255)
+  private String optionKey;
+
   @Column(nullable = false)
   private Integer quantity;
 
@@ -51,16 +56,18 @@ public class CartItem {
   private LocalDateTime addedAt;
 
   @Builder
-  private CartItem(Long userId, Product product, Integer quantity) {
+  private CartItem(Long userId, Product product, String optionKey, Integer quantity) {
     this.userId = userId;
     this.product = product;
+    this.optionKey = optionKey;
     this.quantity = quantity;
   }
 
-  public static CartItem create(Long userId, Product product, int quantity) {
+  public static CartItem create(Long userId, Product product, String optionKey, int quantity) {
     return CartItem.builder()
         .userId(userId)
         .product(product)
+        .optionKey(optionKey)
         .quantity(quantity)
         .build();
   }

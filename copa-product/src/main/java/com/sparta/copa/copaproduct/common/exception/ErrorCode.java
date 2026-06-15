@@ -16,6 +16,11 @@ public enum ErrorCode {
   CATEGORY_CYCLE(HttpStatus.BAD_REQUEST, "카테고리를 자기 자신 또는 하위로 이동할 수 없습니다."),
   INVALID_CATEGORY(HttpStatus.BAD_REQUEST, "존재하지 않는 카테고리가 포함되어 있습니다."),
   PRODUCT_NOT_PURCHASABLE(HttpStatus.BAD_REQUEST, "현재 판매 중인 상품이 아닙니다."),
+  INVALID_PRODUCT_OPTION(HttpStatus.BAD_REQUEST, "상품 옵션 구조가 올바르지 않습니다."),
+  INVALID_OPTION_DISCOUNT(HttpStatus.BAD_REQUEST, "옵션 할인 설정이 올바르지 않습니다."),
+  OPTION_KEY_REQUIRED(HttpStatus.BAD_REQUEST, "옵션 상품은 옵션(optionKey)을 선택해야 합니다."),
+  OPTION_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "옵션이 없는 상품에는 옵션을 지정할 수 없습니다."),
+  OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 옵션을 찾을 수 없습니다."),
   CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니에 해당 상품이 없습니다."),
   ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 작업을 수행할 권한이 없습니다.");
 

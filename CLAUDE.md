@@ -69,6 +69,7 @@
 | `copa-gateway` | Spring Cloud Gateway (WebFlux) + JWT 인증 필터 | `com.sparta.copa.copagateway` |
 | `copa-user` | 회원·인증 서비스 | `com.sparta.copa.copa` |
 | `copa-product` | 상품 서비스 | `com.sparta.copa.copaproduct` |
+| `copa-inventory` | 재고 서비스 | `com.sparta.copa.copainventory` |
 
 - 공통: Spring Boot `3.5.14`, Java 21 (toolchain), Spring Cloud `2025.0.0` (gateway).
 - 인증: `jjwt 0.12.6` 기반 JWT. 게이트웨이에서 토큰 검증 후 라우팅.
@@ -81,11 +82,18 @@
   등록/수정/삭제는 게이트웨이가 주입한 `X-User-Role`로 ADMIN 권한을 한 번 더 검증(방어적 설계).
   DB는 **MySQL**(`copa-product-mysql`) + Flyway, 상품 상세 조회는 Redis Look-Aside 캐시. 장바구니(`/cart`)도 이 서비스가 담당.
   상품 삭제는 물리 삭제가 아니라 **soft delete**(`deleted` 플래그)로 처리한다.
+  상품 옵션은 **무한 뎁스 JSON 트리**(`options`, leaf=선언적 초기 재고)이고 `optionKey`(`색상:네이비/사이즈:M`)로 접근한다.
+  옵션별/조합별 할인(`optionDiscounts`)은 prefix=옵션별·full path=조합별이며 **최장 일치 우선**. 쿠폰은 프로모션 서비스 소관.
+- **`copa-inventory`**: 옵션(`optionKey`)별 재고의 **권위 원천**. "결제 전 예약(reserve) → 결제 후 확정(confirm)/실패 시 해제(release)" 모델로
+  오버셀링을 막는다. 내부 API(`/internal/inventory/**`)만 노출(주문 Saga가 호출). 예약 핫패스는 **비관적 락**으로 직렬화(+`@Version` 낙관적 락),
+  reserve/confirm/release는 모두 **멱등**, 미결제 예약은 **TTL 스케줄러**가 자동 해제. 상품의 옵션 leaf를 `register`로 시드한다.
+  DB는 **MySQL**(`copa-inventory-mysql`), Redis 없음. Kafka Saga 연동은 11주차 예정(현재는 동기 REST 골격).
 - 게이트웨이 화이트리스트는 `GET /products`처럼 `METHOD path` 형식으로 메서드별 공개를 지정할 수 있다(메서드 생략 시 전체 공개).
 
 ## 인프라
 
-`docker-compose.yml` — 회원·인증(`copa-user`)용 MySQL 8.0 + Redis 7.2, 상품(`copa-product`)용 MySQL 8.0 + Redis 7.2(조회 캐시).
+`docker-compose.yml` — 회원·인증(`copa-user`)용 MySQL 8.0 + Redis 7.2, 상품(`copa-product`)용 MySQL 8.0 + Redis 7.2(조회 캐시),
+재고(`copa-inventory`)용 MySQL 8.0.
 
 ```bash
 docker compose up -d
@@ -95,6 +103,7 @@ docker compose up -d
 - `copa-auth-redis`: 6379 (appendonly)
 - `copa-product-mysql`: 3307→3306, db=`copa_product`, user=`copa`/`copa` (root=`root`)
 - `copa-product-redis`: 6380→6379 (상품 상세 조회 Look-Aside 캐시 전용)
+- `copa-inventory-mysql`: 3308→3306, db=`copa_inventory`, user=`copa`/`copa` (root=`root`)
 - Kafka(주문 Saga)는 15주차에 추가 예정.
 
 > 참고: `.clauderules`는 PostgreSQL을 명시하지만 설계 문서와 실제 인프라(`docker-compose.yml`)는

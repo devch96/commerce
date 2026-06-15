@@ -1,4 +1,4 @@
-# 13주차 5일차 — 상품 RDBMS 전환 & 장바구니
+# 14주차 5일차 — 상품 RDBMS 전환 & 장바구니
 
 > copa-product를 MongoDB → MySQL(JPA)로 전환하고, 회원 장바구니·상품 soft delete·금액 BigDecimal 등 도메인을 정교화.
 
@@ -14,8 +14,7 @@
 - `build.gradle`: `data-mongodb` → `data-jpa` + Flyway + mysql-connector (Redis 캐시 유지)
 - `Product`/`Category` `@Document` → `@Entity`, id `String` → `Long`
 - 컬렉션/Map 필드 매핑(성격별):
-  - 카테고리 → **`@ManyToMany List<Category>`**(조인 테이블 `product_categories`). 조상 클로저는 저장하지 않고,
-    검색 시점에 `CategoryService.collectSubtreeIds(categoryId)`로 하위 트리를 펼쳐 `ProductRepository.findByCategoryIds(List<Long>)`로 조회
+  - 카테고리 → **조인 엔티티 `ProductCategory`**(`@ManyToOne Product` + `@ManyToOne Category`, `.clauderules` 준수). Product는 컬렉션을 들지 않고 `ProductCategoryRepository`로 조회. 조상 클로저 저장 없이, 검색 시 `collectSubtreeIds(categoryId)` → `ProductCategoryRepository.findProductsByCategoryIds(List<Long>)`
   - `images` → `@ElementCollection` + **`@OrderColumn`**(순서 보장)
   - `specs` → **JSON 컬럼**(`@Convert` + `StringMapJsonConverter`)
 - `MongoAuditingConfig` → `JpaAuditingConfig`
@@ -39,7 +38,7 @@
 
 ## 🧭 주요 설계 결정
 
-- **필드 성격별 매핑** — 카테고리는 `@ManyToMany`(엔티티 참조), 순서 중요 리스트(`images`)는 `@OrderColumn`, 표시 전용 가변 구조(`specs`)는 JSON 컬럼.
+- **필드 성격별 매핑** — 카테고리는 조인 엔티티 `ProductCategory`(다대일 단방향 2개), 순서 중요 리스트(`images`)는 `@OrderColumn`, 표시 전용 가변 구조(`specs`)는 JSON 컬럼.
 - **카테고리 검색: 저장형 클로저 → 조회 시 하위 트리 확장** — 상품에 조상 클로저를 비정규화 저장하지 않고, 검색 때 카테고리의 하위 트리 id를 모아 `findByCategoryIds`로 조회. 쓰기 단순·동기화 부담 없음(대신 조회마다 트리 1회 계산).
 - **장바구니 상품 참조 = `@ManyToOne` 엔티티** — 같은 서비스라 조인·enrich 이점. 분리 시 productId로 회귀 가능(`ProductQueryService` 경계 유지).
 - **soft delete** — 그림자 productId 우회 대신 상품 자체를 soft delete. 카탈로그 제외 + 장바구니 표시 + 주문/리뷰 참조 보존을 한 번에 해결.
@@ -53,8 +52,8 @@
 - 재고 서비스(옵션별 재고·동시 차감), 카테고리 이동 시 클로저 재계산(이벤트)
 
 ## 🔁 설계 문서 대비 변경점
-- `04. 상품`: 카테고리는 `@ManyToMany List<Category>`(저장형 클로저 폐기, 검색 시 하위 트리 확장), 이미지 `@OrderColumn`, 스펙 JSON, 상품 soft delete, 금액 BigDecimal로 보정.
+- `04. 상품`: 카테고리는 조인 엔티티 `ProductCategory`(저장형 클로저 폐기, 검색 시 하위 트리 확장), 이미지 `@OrderColumn`, 스펙 JSON, 상품 soft delete, 금액 BigDecimal로 보정.
 
 ## ⚠️ 트레이드오프 / 주의
-- `List<Category>`는 product↔category **다대다(@ManyToMany)** 라 `.clauderules`의 "@ManyToOne 단방향만" 규약과 충돌. 요청에 따라 `@ManyToMany`로 가되, 엄격 준수가 필요하면 조인 엔티티(`ProductCategory`)로 바꾸는 선택지 있음.
-- 카테고리 이동/삭제 시 상품 클로저 재계산이 필요 없어짐(저장 안 하니까). 대신 검색마다 하위 트리 계산 + `distinct` 페이징 비용.
+- 상품-카테고리 다대다를 **조인 엔티티 `ProductCategory`**(다대일 단방향 2개)로 표현 → `.clauderules`("@ManyToOne 단방향만") 준수. Product는 컬렉션을 들지 않고 레포지토리로 조회하므로, 목록은 카테고리 id를 **배치 조회**(`findByProduct_IdIn`)해 N+1을 피한다.
+- 카테고리 이동/삭제 시 상품 클로저 재계산이 필요 없음(저장 안 함). 대신 검색마다 하위 트리 계산 + `distinct` 페이징 비용.

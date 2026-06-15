@@ -1,5 +1,6 @@
 package com.sparta.copa.copaproduct.product.dto.request;
 
+import com.sparta.copa.copaproduct.product.domain.OptionDiscount;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -31,7 +32,7 @@ public class ProductCreateRequest {
   @NotEmpty
   private List<Long> categoryIds;
 
-  @NotNull
+  // 옵션 없는 단순 상품의 재고. 옵션이 있으면 leaf 합계로 집계되므로 생략 가능.
   @PositiveOrZero
   private Integer stockQuantity;
 
@@ -42,4 +43,10 @@ public class ProductCreateRequest {
   private List<String> images;
 
   private Map<String, String> specs;
+
+  // 옵션(무한 뎁스 JSON 트리). leaf = 선언적 초기 재고. 예) {"색상":{"네이비":{"사이즈":{"M":10,"L":5}}}}
+  private Map<String, Object> options;
+
+  // 옵션별/조합별 할인 규칙(선택).
+  private List<OptionDiscount> optionDiscounts;
 }

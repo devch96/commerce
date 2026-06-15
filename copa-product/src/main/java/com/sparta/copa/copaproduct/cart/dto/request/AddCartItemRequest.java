@@ -17,6 +17,9 @@ public class AddCartItemRequest {
   @NotNull
   private Long productId;
 
+  // 선택한 옵션 경로(예: 색상:네이비/사이즈:M). 옵션 없는 상품은 생략.
+  private String optionKey;
+
   @NotNull
   @Min(1)
   private Integer quantity;

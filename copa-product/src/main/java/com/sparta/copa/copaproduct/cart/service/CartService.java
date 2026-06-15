@@ -31,35 +31,46 @@ public class CartService {
     return CartResponse.of(responses);
   }
 
-  // 담기: 상품 존재 + 판매중 검증 후, 이미 담겨 있으면 수량 누적, 없으면 새로 담는다.
+  // 담기: 상품 존재 + 판매중 + 옵션 유효성 검증 후, 같은 상품·옵션이 있으면 수량 누적, 없으면 새로 담는다.
   @Transactional
-  public void addItem(Long userId, Long productId, int quantity) {
+  public void addItem(Long userId, Long productId, String optionKey, int quantity) {
     Product product = productQueryService.findById(productId)
         .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     if (!product.isPurchasable()) {
       throw new BusinessException(ErrorCode.PRODUCT_NOT_PURCHASABLE);
     }
+    // 옵션 검증 + 정규화(옵션 없는 상품은 "", 옵션 상품은 유효한 leaf 경로만 통과).
+    String resolvedKey = product.resolveOption(normalize(optionKey)).getOptionKey();
 
-    CartItem existing = cartItemRepository.findByUserIdAndProduct_Id(userId, productId).orElse(null);
+    CartItem existing = cartItemRepository
+        .findByUserIdAndProduct_IdAndOptionKey(userId, productId, resolvedKey).orElse(null);
     if (existing != null) {
       existing.addQuantity(quantity);
     } else {
-      cartItemRepository.save(CartItem.create(userId, product, quantity));
+      cartItemRepository.save(CartItem.create(userId, product, resolvedKey, quantity));
     }
   }
 
   @Transactional
-  public void changeQuantity(Long userId, Long productId, int quantity) {
-    CartItem item = cartItemRepository.findByUserIdAndProduct_Id(userId, productId)
-        .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
+  public void changeQuantity(Long userId, Long productId, String optionKey, int quantity) {
+    CartItem item = findItem(userId, productId, optionKey);
     item.changeQuantity(quantity);
   }
 
   @Transactional
-  public void removeItem(Long userId, Long productId) {
-    CartItem item = cartItemRepository.findByUserIdAndProduct_Id(userId, productId)
+  public void removeItem(Long userId, Long productId, String optionKey) {
+    cartItemRepository.delete(findItem(userId, productId, optionKey));
+  }
+
+  private CartItem findItem(Long userId, Long productId, String optionKey) {
+    return cartItemRepository
+        .findByUserIdAndProduct_IdAndOptionKey(userId, productId, normalize(optionKey))
         .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
-    cartItemRepository.delete(item);
+  }
+
+  // 옵션 없는 상품/누락 시 빈 문자열로 정규화한다(유니크 키 일관성).
+  private String normalize(String optionKey) {
+    return (optionKey == null || optionKey.isBlank()) ? "" : optionKey;
   }
 
   @Transactional
