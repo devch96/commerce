@@ -108,6 +108,22 @@ public class InventoryService {
     }
   }
 
+  // 복원(결제 완료 주문의 사용자 취소). 확정(CONFIRMED)·예약(RESERVED) 모두 가용 재고를 되돌리고 RELEASED로. 멱등.
+  @Transactional
+  public void restore(Long orderId) {
+    List<StockReservation> reservations = reservationRepository.findByOrderId(orderId);
+    for (StockReservation reservation : reservations) {
+      if (reservation.isReleased()) {
+        continue;
+      }
+      Inventory inventory = inventoryRepository
+          .findForUpdate(reservation.getProductId(), reservation.getOptionKey())
+          .orElseThrow(() -> new BusinessException(ErrorCode.INVENTORY_NOT_FOUND));
+      inventory.increase(reservation.getQuantity());
+      reservation.release();
+    }
+  }
+
   // 옵션 없는 상품/누락 시 빈 문자열로 정규화(상품·장바구니와 동일 규약).
   private String normalize(String optionKey) {
     return (optionKey == null || optionKey.isBlank()) ? "" : optionKey;

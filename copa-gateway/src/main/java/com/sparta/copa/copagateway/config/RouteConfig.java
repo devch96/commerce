@@ -17,6 +17,12 @@ public class RouteConfig {
         .route("copa-product", route -> route
             .path("/products/**", "/categories/**", "/cart/**")
             .uri(properties.getProductServiceUri().toString()))
+        .route("copa-order", route -> route
+            .path("/orders/**", "/admin/orders/**")
+            .uri(properties.getOrderServiceUri().toString()))
+        .route("copa-payment", route -> route
+            .path("/payments/**")
+            .uri(properties.getPaymentServiceUri().toString()))
         .build();
   }
 }

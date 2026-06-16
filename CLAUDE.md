@@ -41,6 +41,12 @@
   Lombok 제약, JPA 규약, 커머스 도메인 규칙 등). 작업 전 함께 확인할 것.
 - **record 미사용** — DTO/설정 클래스는 `record` 대신 Lombok 기반 일반 클래스(`@Getter` + 생성자,
   `@Setter` 금지)로 작성한다.
+- **서비스 간 동기 호출은 OpenFeign** — 외부/내부 API 호출은 `RestClient`/`RestTemplate` 대신 `spring-cloud-starter-openfeign`
+  (`@EnableFeignClients` + `@FeignClient(url=...)`)으로 한다. 공통 응답 봉투 언랩·예외 변환은 Feign 인터페이스를 감싸는
+  어댑터 컴포넌트에 둔다(도메인 측 포트는 안정적으로 유지, 테스트는 어댑터를 목킹).
+- **`@Transactional`은 오케스트레이터와 다른 빈에 둔다** — 트랜잭션이 없는 오케스트레이션 메서드가 같은 빈의
+  `@Transactional` 메서드를 `this.`로 호출하면(self-invocation) 프록시를 거치지 않아 트랜잭션이 적용되지 않는다.
+  쓰기/읽기 트랜잭션 메서드는 별도 빈(예: `OrderCommandService`/`OrderQueryService`)으로 분리해 cross-bean 호출로 만든다.
 
 ## DB 스키마 관리 (DB를 쓰는 모든 서비스 공통)
 
@@ -70,6 +76,8 @@
 | `copa-user` | 회원·인증 서비스 | `com.sparta.copa.copa` |
 | `copa-product` | 상품 서비스 | `com.sparta.copa.copaproduct` |
 | `copa-inventory` | 재고 서비스 | `com.sparta.copa.copainventory` |
+| `copa-payment` | 결제 서비스 | `com.sparta.copa.copapayment` |
+| `copa-order` | 주문 서비스 (Saga 오케스트레이터) | `com.sparta.copa.copaorder` |
 
 - 공통: Spring Boot `3.5.14`, Java 21 (toolchain), Spring Cloud `2025.0.0` (gateway).
 - 인증: `jjwt 0.12.6` 기반 JWT. 게이트웨이에서 토큰 검증 후 라우팅.
@@ -88,12 +96,23 @@
   오버셀링을 막는다. 내부 API(`/internal/inventory/**`)만 노출(주문 Saga가 호출). 예약 핫패스는 **비관적 락**으로 직렬화(+`@Version` 낙관적 락),
   reserve/confirm/release는 모두 **멱등**, 미결제 예약은 **TTL 스케줄러**가 자동 해제. 상품의 옵션 leaf를 `register`로 시드한다.
   DB는 **MySQL**(`copa-inventory-mysql`), Redis 없음. Kafka Saga 연동은 11주차 예정(현재는 동기 REST 골격).
+- **`copa-payment`**: 가상 PG(mock) 결제. 주문 Saga의 결제 단계를 수행(재고 예약 성공 후에만 호출). `Payment(orderId 유니크)`로
+  멱등, 결과 status(APPROVED/FAILED)로 주문이 confirm/release 분기. 내부 API(`/internal/payments`)·조회(`/payments/{orderId}`).
+  `PaymentGateway` 인터페이스 뒤에 `MockPaymentGateway`(추후 실 PG 교체). DB는 **MySQL**(`copa-payment-mysql`).
+- **`copa-order`**: 주문 + **동기 Saga 오케스트레이터**. `POST /orders`는 클라이언트가 보낸 품목으로 흐름을 지휘한다:
+  상품 `option-price`로 가격 스냅샷 → 주문 생성(ORDER_PLACED) → 재고 `reserve` → 결제 → 성공 시 재고 `confirm`+`PAYMENT_COMPLETED`,
+  실패/품절 시 결제 취소·재고 `release`·`CANCELLED`(보상). 외부 호출은 **OpenFeign**(상품 8082·재고 8083·결제 8084) —
+  `@FeignClient` 인터페이스(`order/client/feign`) + 어댑터(`order/client`, 공통 응답 봉투 언랩·`FeignException`→`BusinessException` 변환).
+  DB 변경은 `OrderCommandService`(짧은 트랜잭션)에 위임(자기호출 프록시 우회 방지). 사용자 취소는 결제 환불 + 재고 `restore`(확정 재고 복원).
+  금액은 `BigDecimal`. 쿠폰/할인은 옵션 할인가만 반영(쿠폰은 프로모션 서비스 추후). DB는 **MySQL**(`copa-order-mysql`).
+- 게이트웨이는 `/orders/**`·`/admin/orders/**`를 `copa-order`로, `/payments/**`를 `copa-payment`로 라우팅한다(둘 다 인증 필요).
+  `/internal/**`은 게이트웨이를 거치지 않고 서비스가 직접 호출한다.
 - 게이트웨이 화이트리스트는 `GET /products`처럼 `METHOD path` 형식으로 메서드별 공개를 지정할 수 있다(메서드 생략 시 전체 공개).
 
 ## 인프라
 
 `docker-compose.yml` — 회원·인증(`copa-user`)용 MySQL 8.0 + Redis 7.2, 상품(`copa-product`)용 MySQL 8.0 + Redis 7.2(조회 캐시),
-재고(`copa-inventory`)용 MySQL 8.0.
+재고(`copa-inventory`)용 MySQL 8.0, 결제(`copa-payment`)·주문(`copa-order`)용 MySQL 8.0.
 
 ```bash
 docker compose up -d
@@ -104,6 +123,8 @@ docker compose up -d
 - `copa-product-mysql`: 3307→3306, db=`copa_product`, user=`copa`/`copa` (root=`root`)
 - `copa-product-redis`: 6380→6379 (상품 상세 조회 Look-Aside 캐시 전용)
 - `copa-inventory-mysql`: 3308→3306, db=`copa_inventory`, user=`copa`/`copa` (root=`root`)
+- `copa-payment-mysql`: 3309→3306, db=`copa_payment`, user=`copa`/`copa` (root=`root`)
+- `copa-order-mysql`: 3310→3306, db=`copa_order`, user=`copa`/`copa` (root=`root`)
 - Kafka(주문 Saga)는 15주차에 추가 예정.
 
 > 참고: `.clauderules`는 PostgreSQL을 명시하지만 설계 문서와 실제 인프라(`docker-compose.yml`)는

@@ -89,6 +89,10 @@ public class StockReservation {
     return status == ReservationStatus.RESERVED;
   }
 
+  public boolean isReleased() {
+    return status == ReservationStatus.RELEASED;
+  }
+
   // 결제 성공 → 확정(가용 재고는 이미 차감 상태라 추가 차감 없음).
   public void confirm() {
     this.status = ReservationStatus.CONFIRMED;

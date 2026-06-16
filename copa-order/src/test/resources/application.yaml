@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:copa_order;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+
+# Feign 클라이언트 url 플레이스홀더(테스트 컨텍스트 기동용 더미).
+copa:
+  clients:
+    product: http://localhost:8082
+    inventory: http://localhost:8083
+    payment: http://localhost:8084

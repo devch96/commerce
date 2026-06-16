@@ -52,6 +52,13 @@ public class InternalInventoryController {
     inventoryService.confirm(request.getOrderId());
   }
 
+  // 복원(결제 완료 주문의 사용자 취소). 확정 재고까지 되돌린다.
+  @PostMapping("/restore")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void restore(@Valid @RequestBody OrderReferenceRequest request) {
+    inventoryService.restore(request.getOrderId());
+  }
+
   // 해제(결제 실패/취소, 보상).
   @PostMapping("/release")
   @ResponseStatus(HttpStatus.NO_CONTENT)

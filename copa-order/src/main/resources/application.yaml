@@ -1,0 +1,30 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: copa-order
+  datasource:
+    # 호스트 포트 충돌을 피하려 3310으로 매핑한다(auth 3306·product 3307·inventory 3308·payment 3309).
+    url: ${DB_URL:jdbc:mysql://localhost:3310/copa_order?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul}
+    username: ${DB_USERNAME:copa}
+    password: ${DB_PASSWORD:copa}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+# 서비스 간 동기 호출 대상(내부 API). 게이트웨이를 거치지 않는다.
+copa:
+  clients:
+    product: ${PRODUCT_URL:http://localhost:8082}
+    inventory: ${INVENTORY_URL:http://localhost:8083}
+    payment: ${PAYMENT_URL:http://localhost:8084}
