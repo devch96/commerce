@@ -28,3 +28,11 @@ copa:
     product: ${PRODUCT_URL:http://localhost:8082}
     inventory: ${INVENTORY_URL:http://localhost:8083}
     payment: ${PAYMENT_URL:http://localhost:8084}
+
+# 동기 Saga가 의존 서비스 지연에 무기한 블로킹되지 않도록 Feign 타임아웃을 명시한다(기본 60s는 위험).
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: ${FEIGN_CONNECT_TIMEOUT:2000}
+        readTimeout: ${FEIGN_READ_TIMEOUT:5000}

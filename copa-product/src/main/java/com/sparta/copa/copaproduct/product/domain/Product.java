@@ -20,6 +20,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -101,6 +102,10 @@ public class Product {
   @Convert(converter = OptionDiscountListJsonConverter.class)
   @Column(name = "option_discounts", length = 4000)
   private List<OptionDiscount> optionDiscounts;
+
+  // 재고/상태/가격 동시 수정 보호용 낙관적 락.
+  @Version
+  private Long version;
 
   @CreatedDate
   @Column(updatable = false)

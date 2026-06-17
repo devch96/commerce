@@ -41,6 +41,8 @@ class JwtAuthenticationFilterTest {
     GatewayProperties gatewayProperties = new GatewayProperties(
         URI.create("http://localhost:8081"),
         URI.create("http://localhost:8082"),
+        URI.create("http://localhost:8085"),
+        URI.create("http://localhost:8084"),
         List.of("/auth/login", "/auth/signup", "/auth/reissue", "GET /products", "GET /products/**"));
     this.filter = new JwtAuthenticationFilter(jwtProvider, gatewayProperties);
   }

@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -50,6 +51,10 @@ public class UserAddress {
 
   @Column(nullable = false)
   private Boolean isDefault;
+
+  // 기본 배송지 전환 등 동시 수정에 대한 낙관적 락.
+  @Version
+  private Long version;
 
   @Builder
   private UserAddress(User user, String addressName, String receiverName, String zipcode,

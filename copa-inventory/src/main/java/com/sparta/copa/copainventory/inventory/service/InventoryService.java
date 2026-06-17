@@ -12,6 +12,7 @@ import com.sparta.copa.copainventory.inventory.dto.response.InventoryResponse;
 import com.sparta.copa.copainventory.inventory.repository.InventoryRepository;
 import com.sparta.copa.copainventory.inventory.repository.StockReservationRepository;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,14 @@ public class InventoryService {
 
   // 예약 후 결제 미완료 시 자동 해제까지의 유예(분).
   private static final long RESERVATION_TTL_MINUTES = 5;
+
+  // 같은 재고 행을 항상 동일 순서로 잠가 reserve/release/restore 간 락 교차로 인한 데드락을 방지한다.
+  private static final Comparator<ReserveItemRequest> ITEM_LOCK_ORDER =
+      Comparator.comparing(ReserveItemRequest::getProductId)
+          .thenComparing(i -> normalize(i.getOptionKey()));
+  private static final Comparator<StockReservation> RESERVATION_LOCK_ORDER =
+      Comparator.comparing(StockReservation::getProductId)
+          .thenComparing(StockReservation::getOptionKey);
 
   private final InventoryRepository inventoryRepository;
   private final StockReservationRepository reservationRepository;
@@ -70,7 +79,9 @@ public class InventoryService {
       return;
     }
     LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(RESERVATION_TTL_MINUTES);
-    for (ReserveItemRequest item : request.getItems()) {
+    // 재고 행을 항상 동일 순서로 잠가 동시 주문 간 락 교차 데드락을 방지한다.
+    List<ReserveItemRequest> items = request.getItems().stream().sorted(ITEM_LOCK_ORDER).toList();
+    for (ReserveItemRequest item : items) {
       if (item.getQuantity() == null || item.getQuantity() < 1) {
         throw new BusinessException(ErrorCode.INVALID_QUANTITY);
       }
@@ -86,19 +97,22 @@ public class InventoryService {
   }
 
   // 확정(결제 성공). 가용 재고는 예약 시 이미 차감되어 추가 차감 없음. 멱등.
+  // 예약 행을 잠가 동시 TTL 해제와 상호 배타로 만든다(먼저 전이한 쪽이 이김).
   @Transactional
   public void confirm(Long orderId) {
     for (StockReservation reservation
-        : reservationRepository.findByOrderIdAndStatus(orderId, ReservationStatus.RESERVED)) {
+        : reservationRepository.findForUpdateByOrderIdAndStatus(orderId, ReservationStatus.RESERVED)) {
       reservation.confirm();
     }
   }
 
   // 해제(결제 실패/타임아웃/TTL 만료). 가용 재고를 복원하고 예약을 RELEASED로 표시. 멱등.
+  // 예약 행을 먼저 잠가(상호 배타) confirm·다중 인스턴스 스케줄러와의 경합 및 재고 이중 복원을 막는다.
   @Transactional
   public void release(Long orderId) {
-    List<StockReservation> reservations =
-        reservationRepository.findByOrderIdAndStatus(orderId, ReservationStatus.RESERVED);
+    List<StockReservation> reservations = reservationRepository
+        .findForUpdateByOrderIdAndStatus(orderId, ReservationStatus.RESERVED)
+        .stream().sorted(RESERVATION_LOCK_ORDER).toList();
     for (StockReservation reservation : reservations) {
       Inventory inventory = inventoryRepository
           .findForUpdate(reservation.getProductId(), reservation.getOptionKey())
@@ -111,7 +125,8 @@ public class InventoryService {
   // 복원(결제 완료 주문의 사용자 취소). 확정(CONFIRMED)·예약(RESERVED) 모두 가용 재고를 되돌리고 RELEASED로. 멱등.
   @Transactional
   public void restore(Long orderId) {
-    List<StockReservation> reservations = reservationRepository.findByOrderId(orderId);
+    List<StockReservation> reservations = reservationRepository.findForUpdateByOrderId(orderId)
+        .stream().sorted(RESERVATION_LOCK_ORDER).toList();
     for (StockReservation reservation : reservations) {
       if (reservation.isReleased()) {
         continue;
@@ -125,7 +140,7 @@ public class InventoryService {
   }
 
   // 옵션 없는 상품/누락 시 빈 문자열로 정규화(상품·장바구니와 동일 규약).
-  private String normalize(String optionKey) {
+  private static String normalize(String optionKey) {
     return (optionKey == null || optionKey.isBlank()) ? "" : optionKey;
   }
 }

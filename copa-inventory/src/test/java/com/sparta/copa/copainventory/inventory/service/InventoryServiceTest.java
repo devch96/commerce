@@ -104,7 +104,7 @@ class InventoryServiceTest {
   @DisplayName("확정하면 예약을 CONFIRMED로 전환한다")
   void confirmTransitionsStatus() {
     StockReservation reservation = reserved(1L, 100L, "", 3);
-    given(reservationRepository.findByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
+    given(reservationRepository.findForUpdateByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
         .willReturn(List.of(reservation));
 
     inventoryService.confirm(1L);
@@ -117,7 +117,7 @@ class InventoryServiceTest {
   void releaseRestoresStock() {
     StockReservation reservation = reserved(1L, 100L, "", 3);
     Inventory inventory = Inventory.create(100L, "", 7);
-    given(reservationRepository.findByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
+    given(reservationRepository.findForUpdateByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
         .willReturn(List.of(reservation));
     given(inventoryRepository.findForUpdate(100L, "")).willReturn(Optional.of(inventory));
 
@@ -130,7 +130,7 @@ class InventoryServiceTest {
   @Test
   @DisplayName("RESERVED 예약이 없으면 확정은 멱등하게 아무것도 하지 않는다")
   void confirmIdempotentWhenNothingReserved() {
-    given(reservationRepository.findByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
+    given(reservationRepository.findForUpdateByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
         .willReturn(List.of());
 
     inventoryService.confirm(1L);

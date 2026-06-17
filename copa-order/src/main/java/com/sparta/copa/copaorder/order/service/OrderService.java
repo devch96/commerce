@@ -39,6 +39,9 @@ public class OrderService {
   private final InventoryClient inventoryClient;
   private final PaymentClient paymentClient;
 
+  // 결제 승인 후 재고 확정 재시도 횟수(confirm은 멱등이라 안전하게 반복 가능). 정식 백오프/서킷브레이커는 추후 Resilience4j.
+  private static final int CONFIRM_MAX_ATTEMPTS = 3;
+
   public OrderResponse createOrder(Long userId, CreateOrderRequest request) {
     // 1. 상품 서비스로 옵션별 현재가를 받아 주문 시점 가격을 스냅샷.
     List<PricedLine> lines = new ArrayList<>();
@@ -52,40 +55,60 @@ public class OrderService {
     Order order = commandService.createPlacedOrder(userId, lines, request.getCouponId());
     Long orderId = order.getId();
 
+    // 3~4. 결제 승인 전까지가 "보상(roll-back) 가능" 구간. 여기서 실패하면 예약 해제 + 주문 취소.
     boolean reserved = false;
-    boolean paid = false;
     try {
-      // 3. 재고 예약(결제 전). 부족하면 OUT_OF_STOCK → 보상.
       inventoryClient.reserve(orderId, toReserveLines(lines));
       reserved = true;
 
-      // 4. 결제. 승인 실패면 PAYMENT_FAILED.
       PaymentView payment = paymentClient.pay(orderId, userId, order.payableAmount());
       if (!payment.isApproved()) {
         throw new BusinessException(ErrorCode.PAYMENT_FAILED);
       }
-      paid = true;
-
-      // 5. 재고 확정 + 주문 완료.
-      inventoryClient.confirm(orderId);
-      commandService.markPaymentCompleted(orderId);
     } catch (BusinessException e) {
-      compensate(orderId, reserved, paid, e);
+      compensate(orderId, reserved, e);
       throw e;
     }
+
+    // 5. 결제 승인(캡처) 완료. 이후 재고 확정·주문 완료는 되돌리지 않고 전진(roll-forward)으로 완결한다.
+    //    이미 받은 결제를 보상(환불·예약해제)으로 되돌리면 결제·재고 정합이 깨지므로 재시도로 마감한다.
+    completePaidOrder(orderId);
     return queryService.getOwnedOrder(orderId, userId);
   }
 
-  // 실패 보상: 결제했으면 결제 취소, 예약했으면 해제, 주문은 취소로 마감(모두 best-effort + 멱등).
-  private void compensate(Long orderId, boolean reserved, boolean paid, BusinessException cause) {
-    if (paid) {
-      safe(() -> paymentClient.cancel(orderId), orderId, "결제 취소");
-    }
+  // 결제 승인 전 실패 보상: 예약했으면 해제, 주문은 취소로 마감(best-effort + 멱등). 결제는 미승인이라 환불 없음.
+  private void compensate(Long orderId, boolean reserved, BusinessException cause) {
     if (reserved) {
       safe(() -> inventoryClient.release(orderId), orderId, "재고 예약 해제");
     }
     safe(() -> commandService.markCancelled(orderId, "주문 실패: " + cause.getErrorCode().name()),
         orderId, "주문 취소");
+  }
+
+  // 결제 승인 후 마감(roll-forward): 재고 확정(멱등 재시도) → 주문 완료. 실패해도 환불/해제하지 않고
+  // 후속 복구가 재처리하도록 ORDER_PLACED로 남긴 채 실패를 드러낸다(결제는 이미 캡처됨).
+  private void completePaidOrder(Long orderId) {
+    try {
+      confirmWithRetry(orderId);
+      commandService.markPaymentCompleted(orderId);
+    } catch (RuntimeException e) {
+      log.error("결제 완료 후 주문 확정 실패 — 복구 필요 orderId={}", orderId, e);
+      throw new BusinessException(ErrorCode.ORDER_COMPLETION_FAILED);
+    }
+  }
+
+  private void confirmWithRetry(Long orderId) {
+    RuntimeException last = null;
+    for (int attempt = 1; attempt <= CONFIRM_MAX_ATTEMPTS; attempt++) {
+      try {
+        inventoryClient.confirm(orderId);
+        return;
+      } catch (RuntimeException e) {
+        last = e;
+        log.warn("재고 확정 재시도 {}/{} orderId={}", attempt, CONFIRM_MAX_ATTEMPTS, orderId);
+      }
+    }
+    throw last;
   }
 
   public OrderResponse getOrder(Long orderId, Long userId) {
@@ -106,9 +129,10 @@ public class OrderService {
     if (!order.getStatus().isCancellableByUser()) {
       throw new BusinessException(ErrorCode.ORDER_NOT_CANCELLABLE);
     }
+    // 환불이 성공해야 취소가 성립하므로 결제 취소는 하드 콜. 이후 재고 복원·주문 마감은 멱등이라 best-effort.
     paymentClient.cancel(orderId);
-    inventoryClient.restore(orderId);
-    commandService.markCancelled(orderId, "사용자 취소");
+    safe(() -> inventoryClient.restore(orderId), orderId, "재고 복원");
+    safe(() -> commandService.markCancelled(orderId, "사용자 취소"), orderId, "주문 취소");
     return queryService.getOwnedOrder(orderId, userId);
   }
 

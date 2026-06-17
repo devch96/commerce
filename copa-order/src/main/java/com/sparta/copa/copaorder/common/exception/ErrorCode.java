@@ -15,6 +15,9 @@ public enum ErrorCode {
   ORDER_NOT_CANCELLABLE(HttpStatus.BAD_REQUEST, "현재 상태에서는 취소할 수 없습니다."),
   INVALID_ORDER_STATUS(HttpStatus.BAD_REQUEST, "허용되지 않는 주문 상태 변경입니다."),
   ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 주문에 접근할 권한이 없습니다."),
+  // 결제는 승인(캡처)됐으나 이후 재고 확정·주문 완료에 실패. 환불로 되돌리지 않고 후속 복구가 재처리한다.
+  ORDER_COMPLETION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR,
+      "결제는 완료되었으나 주문 확정 처리에 실패했습니다. 잠시 후 자동 반영됩니다."),
   // 의존 서비스(상품/재고/결제) 호출 실패.
   DEPENDENT_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "의존 서비스 호출에 실패했습니다.");
 

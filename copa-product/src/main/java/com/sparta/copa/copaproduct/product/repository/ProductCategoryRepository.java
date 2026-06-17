@@ -1,5 +1,6 @@
 package com.sparta.copa.copaproduct.product.repository;
 
+import com.sparta.copa.copaproduct.common.enums.ProductStatus;
 import com.sparta.copa.copaproduct.product.domain.Product;
 import com.sparta.copa.copaproduct.product.domain.ProductCategory;
 import java.util.Collection;
@@ -23,10 +24,13 @@ public interface ProductCategoryRepository extends JpaRepository<ProductCategory
   void deleteByProductId(@Param("productId") Long productId);
 
   // 검색: 주어진 카테고리 id 집합(검색 카테고리 + 하위 트리) 중 하나라도 속한 상품(중복 제거).
+  // 공개 목록이므로 soft delete + 비공개 상태(HIDDEN·DISCONTINUED)를 제외한다.
   @Query(value = "select distinct pc.product from ProductCategory pc"
-      + " where pc.category.id in :categoryIds and pc.product.deleted = false",
+      + " where pc.category.id in :categoryIds and pc.product.deleted = false"
+      + " and pc.product.status in :statuses",
       countQuery = "select count(distinct pc.product) from ProductCategory pc"
-          + " where pc.category.id in :categoryIds and pc.product.deleted = false")
+          + " where pc.category.id in :categoryIds and pc.product.deleted = false"
+          + " and pc.product.status in :statuses")
   Page<Product> findProductsByCategoryIds(@Param("categoryIds") Collection<Long> categoryIds,
-      Pageable pageable);
+      @Param("statuses") Collection<ProductStatus> statuses, Pageable pageable);
 }

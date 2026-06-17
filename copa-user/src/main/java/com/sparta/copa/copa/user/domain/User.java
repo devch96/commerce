@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -50,6 +51,10 @@ public class User {
   // 회원 탈퇴 시 데이터를 물리 삭제하지 않고 비활성화한다(주문 이력 등 참조 무결성 보존).
   @Column(nullable = false)
   private Boolean isActive;
+
+  // 비밀번호 변경·등급 변경 등 동시 수정에 대한 낙관적 락.
+  @Version
+  private Long version;
 
   @CreatedDate
   @Column(updatable = false)

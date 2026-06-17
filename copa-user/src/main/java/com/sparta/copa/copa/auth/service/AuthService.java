@@ -51,6 +51,11 @@ public class AuthService {
       throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
     }
     User user = userService.getById(userId);
+    // 탈퇴/비활성 계정은 토큰만 있어도 재발급으로 access를 무한 연장할 수 없도록 차단하고 세션을 정리한다.
+    if (!user.getIsActive()) {
+      tokenService.delete(userId);
+      throw new BusinessException(ErrorCode.ACCOUNT_DEACTIVATED);
+    }
     return issueTokens(user);
   }
 

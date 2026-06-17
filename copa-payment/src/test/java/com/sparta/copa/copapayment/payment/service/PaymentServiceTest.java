@@ -30,6 +30,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PaymentServiceTest {
 
   @Mock
+  private PaymentCommandService commandService;
+  @Mock
   private PaymentRepository paymentRepository;
   @Mock
   private PaymentGateway paymentGateway;
@@ -42,11 +44,13 @@ class PaymentServiceTest {
   }
 
   @Test
-  @DisplayName("PG 승인 시 APPROVED로 결제된다")
-  void payApproved() {
+  @DisplayName("신규 주문이면 결제 생성에 위임한다")
+  void payDelegatesWhenNew() {
+    Payment approved = Payment.request(1L, 7L, BigDecimal.valueOf(10000));
+    approved.approve("PG-xyz");
     given(paymentRepository.findByOrderId(1L)).willReturn(Optional.empty());
-    given(paymentRepository.save(any(Payment.class))).willAnswer(inv -> inv.getArgument(0));
-    given(paymentGateway.approve(eq(1L), any())).willReturn(new PgApproval(true, "PG-xyz"));
+    given(commandService.process(any(PaymentRequest.class)))
+        .willReturn(PaymentResponse.from(approved));
 
     PaymentResponse response = paymentService.pay(request());
 
@@ -55,19 +59,7 @@ class PaymentServiceTest {
   }
 
   @Test
-  @DisplayName("PG 거절 시 FAILED로 기록되고 예외를 던지지 않는다")
-  void payDeclined() {
-    given(paymentRepository.findByOrderId(1L)).willReturn(Optional.empty());
-    given(paymentRepository.save(any(Payment.class))).willAnswer(inv -> inv.getArgument(0));
-    given(paymentGateway.approve(eq(1L), any())).willReturn(new PgApproval(false, null));
-
-    PaymentResponse response = paymentService.pay(request());
-
-    assertThat(response.getStatus()).isEqualTo(PaymentStatus.FAILED);
-  }
-
-  @Test
-  @DisplayName("같은 주문 재결제는 기존 결제를 멱등하게 반환한다")
+  @DisplayName("같은 주문 재결제는 기존 결제를 멱등하게 반환하고 생성에 위임하지 않는다")
   void payIdempotent() {
     Payment existing = Payment.request(1L, 7L, BigDecimal.valueOf(10000));
     existing.approve("PG-old");
@@ -76,8 +68,23 @@ class PaymentServiceTest {
     PaymentResponse response = paymentService.pay(request());
 
     assertThat(response.getPgTransactionId()).isEqualTo("PG-old");
-    verify(paymentRepository, never()).save(any());
-    verify(paymentGateway, never()).approve(any(), any());
+    verify(commandService, never()).process(any());
+  }
+
+  @Test
+  @DisplayName("동시 중복 요청으로 유니크 충돌이 나면 먼저 성공한 결제를 멱등하게 반환한다")
+  void payIdempotentOnConflict() {
+    Payment winner = Payment.request(1L, 7L, BigDecimal.valueOf(10000));
+    winner.approve("PG-winner");
+    given(paymentRepository.findByOrderId(1L))
+        .willReturn(Optional.empty())
+        .willReturn(Optional.of(winner));
+    given(commandService.process(any(PaymentRequest.class)))
+        .willThrow(new org.springframework.dao.DataIntegrityViolationException("dup"));
+
+    PaymentResponse response = paymentService.pay(request());
+
+    assertThat(response.getPgTransactionId()).isEqualTo("PG-winner");
   }
 
   @Test

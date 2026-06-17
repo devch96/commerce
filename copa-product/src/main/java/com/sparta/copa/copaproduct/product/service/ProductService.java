@@ -2,6 +2,7 @@ package com.sparta.copa.copaproduct.product.service;
 
 import com.sparta.copa.copaproduct.category.domain.Category;
 import com.sparta.copa.copaproduct.category.service.CategoryService;
+import com.sparta.copa.copaproduct.common.enums.ProductStatus;
 import com.sparta.copa.copaproduct.common.exception.BusinessException;
 import com.sparta.copa.copaproduct.common.exception.ErrorCode;
 import com.sparta.copa.copaproduct.product.domain.Product;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -29,6 +31,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Service
 @RequiredArgsConstructor
 public class ProductService {
+
+  // 공개 카탈로그에 노출되는 상태. HIDDEN(가공 중)·DISCONTINUED(단종)는 목록에서 제외한다.
+  private static final Set<ProductStatus> PUBLICLY_VISIBLE =
+      Set.of(ProductStatus.SALE, ProductStatus.SOLD_OUT);
 
   private final ProductRepository productRepository;
   private final ProductCategoryRepository productCategoryRepository;
@@ -57,8 +63,8 @@ public class ProductService {
   public Page<ProductResponse> getProducts(Long categoryId, Pageable pageable) {
     Page<Product> products = categoryId != null
         ? productCategoryRepository.findProductsByCategoryIds(
-            categoryService.collectSubtreeIds(categoryId), pageable)
-        : productRepository.findByDeletedFalse(pageable);
+            categoryService.collectSubtreeIds(categoryId), PUBLICLY_VISIBLE, pageable)
+        : productRepository.findByDeletedFalseAndStatusIn(PUBLICLY_VISIBLE, pageable);
 
     Map<Long, List<Long>> categoryIdsByProduct = categoryIdsByProduct(
         products.getContent().stream().map(Product::getId).toList());
