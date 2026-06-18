@@ -146,6 +146,29 @@ services:
       timeout: 5s
       retries: 5
 
+  copa-coupon-mysql:
+    image: mysql:8.0
+    container_name: copa-coupon-mysql
+    # 호스트 포트 충돌을 피하려 3311로 매핑한다.
+    ports:
+      - "3311:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: copa_coupon
+      MYSQL_USER: copa
+      MYSQL_PASSWORD: copa
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - copa-coupon-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   copa-auth-mysql-data:
   copa-auth-redis-data:
@@ -154,3 +177,4 @@ volumes:
   copa-inventory-mysql-data:
   copa-payment-mysql-data:
   copa-order-mysql-data:
+  copa-coupon-mysql-data:

@@ -78,6 +78,7 @@
 | `copa-inventory` | 재고 서비스 | `com.sparta.copa.copainventory` |
 | `copa-payment` | 결제 서비스 | `com.sparta.copa.copapayment` |
 | `copa-order` | 주문 서비스 (Saga 오케스트레이터) | `com.sparta.copa.copaorder` |
+| `copa-coupon` | 쿠폰·프로모션 서비스 | `com.sparta.copa.copacoupon` |
 
 - 공통: Spring Boot `3.5.14`, Java 21 (toolchain), Spring Cloud `2025.0.0` (gateway).
 - 인증: `jjwt 0.12.6` 기반 JWT. 게이트웨이에서 토큰 검증 후 라우팅.
@@ -104,15 +105,20 @@
   실패/품절 시 결제 취소·재고 `release`·`CANCELLED`(보상). 외부 호출은 **OpenFeign**(상품 8082·재고 8083·결제 8084) —
   `@FeignClient` 인터페이스(`order/client/feign`) + 어댑터(`order/client`, 공통 응답 봉투 언랩·`FeignException`→`BusinessException` 변환).
   DB 변경은 `OrderCommandService`(짧은 트랜잭션)에 위임(자기호출 프록시 우회 방지). 사용자 취소는 결제 환불 + 재고 `restore`(확정 재고 복원).
-  금액은 `BigDecimal`. 쿠폰/할인은 옵션 할인가만 반영(쿠폰은 프로모션 서비스 추후). DB는 **MySQL**(`copa-order-mysql`).
-- 게이트웨이는 `/orders/**`·`/admin/orders/**`를 `copa-order`로, `/payments/**`를 `copa-payment`로 라우팅한다(둘 다 인증 필요).
+  금액은 `BigDecimal`. 쿠폰 적용 시 옵션 할인가(주문 총액) 위에 쿠폰 할인을 스택. DB는 **MySQL**(`copa-order-mysql`).
+  쿠폰도 재고와 동일하게 **reserve→use(confirm)→release/restore**로 Saga에 연동(결제 8084·쿠폰 8086 추가).
+- **`copa-coupon`**: 쿠폰·프로모션 서비스(설계 08). `Coupon`(정의/템플릿) + `UserCoupon`(발급 인스턴스, `(coupon_id,user_id)` 유니크=1인 1매).
+  할인 `type`(FIXED_AMOUNT/PERCENTAGE, 정률은 `maxDiscount` 상한), 유효기간 3종, `minOrderAmount`, 한정 수량(`total/issuedQuantity`), `targetType`(현재 ALL).
+  발급은 **비관적 락 + 유니크**로 초과/중복 발급 0. 내부 API(`/internal/coupons`) **reserve(검증+할인계산)·confirm(use)·release·restore**는 `orderId` 멱등(주문 Saga가 호출).
+  사용자용 발급/조회(`/coupons/**`), 관리(`/admin/coupons/**`, ADMIN). DB는 **MySQL**(`copa-coupon-mysql`). **Phase 1=동기**(Redis 선착순·Kafka는 Phase 2~3).
+- 게이트웨이는 `/orders/**`·`/admin/orders/**`를 `copa-order`로, `/payments/**`를 `copa-payment`로, `/coupons/**`·`/admin/coupons/**`를 `copa-coupon`으로 라우팅한다(모두 인증 필요).
   `/internal/**`은 게이트웨이를 거치지 않고 서비스가 직접 호출한다.
 - 게이트웨이 화이트리스트는 `GET /products`처럼 `METHOD path` 형식으로 메서드별 공개를 지정할 수 있다(메서드 생략 시 전체 공개).
 
 ## 인프라
 
 `docker-compose.yml` — 회원·인증(`copa-user`)용 MySQL 8.0 + Redis 7.2, 상품(`copa-product`)용 MySQL 8.0 + Redis 7.2(조회 캐시),
-재고(`copa-inventory`)용 MySQL 8.0, 결제(`copa-payment`)·주문(`copa-order`)용 MySQL 8.0.
+재고(`copa-inventory`)용 MySQL 8.0, 결제(`copa-payment`)·주문(`copa-order`)·쿠폰(`copa-coupon`)용 MySQL 8.0.
 
 ```bash
 docker compose up -d
@@ -125,7 +131,8 @@ docker compose up -d
 - `copa-inventory-mysql`: 3308→3306, db=`copa_inventory`, user=`copa`/`copa` (root=`root`)
 - `copa-payment-mysql`: 3309→3306, db=`copa_payment`, user=`copa`/`copa` (root=`root`)
 - `copa-order-mysql`: 3310→3306, db=`copa_order`, user=`copa`/`copa` (root=`root`)
-- Kafka(주문 Saga)는 15주차에 추가 예정.
+- `copa-coupon-mysql`: 3311→3306, db=`copa_coupon`, user=`copa`/`copa` (root=`root`)
+- Kafka(주문 Saga·쿠폰 선착순)는 추후 추가 예정(쿠폰 Phase 2~3).
 
 > 참고: `.clauderules`는 PostgreSQL을 명시하지만 설계 문서와 실제 인프라(`docker-compose.yml`)는
 > **MySQL 8.0** 기준이다. 이 프로젝트는 MySQL로 진행하며, Flyway도 `flyway-mysql`을 쓴다.

@@ -101,6 +101,14 @@ public class Order {
     return this.userId != null && this.userId.equals(userId);
   }
 
+  // 쿠폰 선점 후 확정된 할인액 반영(결제 전, ORDER_PLACED에서만).
+  public void applyCouponDiscount(BigDecimal discount) {
+    if (status != OrderStatus.ORDER_PLACED) {
+      throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+    }
+    this.discountAmount = discount == null ? BigDecimal.ZERO : discount;
+  }
+
   // 결제 성공 확정.
   public void markPaymentCompleted() {
     if (status != OrderStatus.ORDER_PLACED) {

@@ -1,0 +1,24 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: copa-coupon
+  datasource:
+    # auth(3306)·product(3307)·inventory(3308)·payment(3309)·order(3310)와 호스트 포트 충돌을 피하려 3311로 매핑한다.
+    url: ${DB_URL:jdbc:mysql://localhost:3311/copa_coupon?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul}
+    username: ${DB_USERNAME:copa}
+    password: ${DB_PASSWORD:copa}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    # 스키마는 Flyway 마이그레이션으로만 관리한다. Hibernate DDL 자동 생성은 사용하지 않는다.
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true

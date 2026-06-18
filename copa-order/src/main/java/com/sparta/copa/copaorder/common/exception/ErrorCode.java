@@ -12,6 +12,8 @@ public enum ErrorCode {
   // 재고 예약 실패(경쟁에서 밀림) → 주문 취소.
   OUT_OF_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),
   PAYMENT_FAILED(HttpStatus.PAYMENT_REQUIRED, "결제에 실패했습니다."),
+  // 쿠폰 적용 불가(최소금액 미달·만료·소유/상태 부적합) → 주문 거절.
+  COUPON_NOT_APPLICABLE(HttpStatus.BAD_REQUEST, "쿠폰을 적용할 수 없습니다."),
   ORDER_NOT_CANCELLABLE(HttpStatus.BAD_REQUEST, "현재 상태에서는 취소할 수 없습니다."),
   INVALID_ORDER_STATUS(HttpStatus.BAD_REQUEST, "허용되지 않는 주문 상태 변경입니다."),
   ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 주문에 접근할 권한이 없습니다."),

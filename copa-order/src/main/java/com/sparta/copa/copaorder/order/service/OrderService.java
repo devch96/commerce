@@ -3,6 +3,7 @@ package com.sparta.copa.copaorder.order.service;
 import com.sparta.copa.copaorder.common.enums.OrderStatus;
 import com.sparta.copa.copaorder.common.exception.BusinessException;
 import com.sparta.copa.copaorder.common.exception.ErrorCode;
+import com.sparta.copa.copaorder.order.client.CouponClient;
 import com.sparta.copa.copaorder.order.client.InventoryClient;
 import com.sparta.copa.copaorder.order.client.PaymentClient;
 import com.sparta.copa.copaorder.order.client.ProductClient;
@@ -14,6 +15,7 @@ import com.sparta.copa.copaorder.order.dto.request.CreateOrderRequest;
 import com.sparta.copa.copaorder.order.dto.request.OrderLineRequest;
 import com.sparta.copa.copaorder.order.dto.response.OrderResponse;
 import com.sparta.copa.copaorder.order.repository.OrderRepository;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class OrderService {
   private final ProductClient productClient;
   private final InventoryClient inventoryClient;
   private final PaymentClient paymentClient;
+  private final CouponClient couponClient;
 
   // 결제 승인 후 재고 확정 재시도 횟수(confirm은 멱등이라 안전하게 반복 가능). 정식 백오프/서킷브레이커는 추후 Resilience4j.
   private static final int CONFIRM_MAX_ATTEMPTS = 3;
@@ -54,42 +57,60 @@ public class OrderService {
     // 2. 주문 생성(ORDER_PLACED). 이후 단계는 보상 가능한 외부 호출.
     Order order = commandService.createPlacedOrder(userId, lines, request.getCouponId());
     Long orderId = order.getId();
+    Long couponId = request.getCouponId();
 
-    // 3~4. 결제 승인 전까지가 "보상(roll-back) 가능" 구간. 여기서 실패하면 예약 해제 + 주문 취소.
+    // 3~5. 결제 승인 전까지가 "보상(roll-back) 가능" 구간. 여기서 실패하면 쿠폰·예약 해제 + 주문 취소.
+    boolean couponReserved = false;
     boolean reserved = false;
     try {
+      // 쿠폰 선점(검증 + 할인 계산). 옵션 할인 반영가(주문 총액) 기준으로 할인액을 받아 주문에 반영.
+      BigDecimal discount = BigDecimal.ZERO;
+      if (couponId != null) {
+        discount = couponClient.reserve(couponId, userId, orderId, order.getTotalAmount());
+        couponReserved = true;
+        commandService.applyCouponDiscount(orderId, discount);
+      }
+
       inventoryClient.reserve(orderId, toReserveLines(lines));
       reserved = true;
 
-      PaymentView payment = paymentClient.pay(orderId, userId, order.payableAmount());
+      BigDecimal payable = order.getTotalAmount().subtract(discount).max(BigDecimal.ZERO);
+      PaymentView payment = paymentClient.pay(orderId, userId, payable);
       if (!payment.isApproved()) {
         throw new BusinessException(ErrorCode.PAYMENT_FAILED);
       }
     } catch (BusinessException e) {
-      compensate(orderId, reserved, e);
+      compensate(orderId, couponReserved, reserved, e);
       throw e;
     }
 
-    // 5. 결제 승인(캡처) 완료. 이후 재고 확정·주문 완료는 되돌리지 않고 전진(roll-forward)으로 완결한다.
+    // 6. 결제 승인(캡처) 완료. 이후 재고 확정·쿠폰 사용·주문 완료는 되돌리지 않고 전진(roll-forward)으로 완결한다.
     //    이미 받은 결제를 보상(환불·예약해제)으로 되돌리면 결제·재고 정합이 깨지므로 재시도로 마감한다.
-    completePaidOrder(orderId);
+    completePaidOrder(orderId, couponReserved);
     return queryService.getOwnedOrder(orderId, userId);
   }
 
-  // 결제 승인 전 실패 보상: 예약했으면 해제, 주문은 취소로 마감(best-effort + 멱등). 결제는 미승인이라 환불 없음.
-  private void compensate(Long orderId, boolean reserved, BusinessException cause) {
+  // 결제 승인 전 실패 보상: 쿠폰·재고를 해제하고 주문은 취소로 마감(best-effort + 멱등). 결제는 미승인이라 환불 없음.
+  private void compensate(Long orderId, boolean couponReserved, boolean reserved,
+      BusinessException cause) {
     if (reserved) {
       safe(() -> inventoryClient.release(orderId), orderId, "재고 예약 해제");
+    }
+    if (couponReserved) {
+      safe(() -> couponClient.release(orderId), orderId, "쿠폰 선점 해제");
     }
     safe(() -> commandService.markCancelled(orderId, "주문 실패: " + cause.getErrorCode().name()),
         orderId, "주문 취소");
   }
 
-  // 결제 승인 후 마감(roll-forward): 재고 확정(멱등 재시도) → 주문 완료. 실패해도 환불/해제하지 않고
+  // 결제 승인 후 마감(roll-forward): 재고 확정 + 쿠폰 사용(멱등 재시도) → 주문 완료. 실패해도 환불/해제하지 않고
   // 후속 복구가 재처리하도록 ORDER_PLACED로 남긴 채 실패를 드러낸다(결제는 이미 캡처됨).
-  private void completePaidOrder(Long orderId) {
+  private void completePaidOrder(Long orderId, boolean couponUsed) {
     try {
       confirmWithRetry(orderId);
+      if (couponUsed) {
+        couponClient.confirm(orderId);
+      }
       commandService.markPaymentCompleted(orderId);
     } catch (RuntimeException e) {
       log.error("결제 완료 후 주문 확정 실패 — 복구 필요 orderId={}", orderId, e);
@@ -129,9 +150,12 @@ public class OrderService {
     if (!order.getStatus().isCancellableByUser()) {
       throw new BusinessException(ErrorCode.ORDER_NOT_CANCELLABLE);
     }
-    // 환불이 성공해야 취소가 성립하므로 결제 취소는 하드 콜. 이후 재고 복원·주문 마감은 멱등이라 best-effort.
+    // 환불이 성공해야 취소가 성립하므로 결제 취소는 하드 콜. 이후 재고·쿠폰 복원·주문 마감은 멱등이라 best-effort.
     paymentClient.cancel(orderId);
     safe(() -> inventoryClient.restore(orderId), orderId, "재고 복원");
+    if (order.getCouponId() != null) {
+      safe(() -> couponClient.restore(orderId), orderId, "쿠폰 복원");
+    }
     safe(() -> commandService.markCancelled(orderId, "사용자 취소"), orderId, "주문 취소");
     return queryService.getOwnedOrder(orderId, userId);
   }

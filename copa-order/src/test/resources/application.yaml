@@ -17,3 +17,4 @@ copa:
     product: http://localhost:8082
     inventory: http://localhost:8083
     payment: http://localhost:8084
+    coupon: http://localhost:8086

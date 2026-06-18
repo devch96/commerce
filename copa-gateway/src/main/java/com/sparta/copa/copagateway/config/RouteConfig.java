@@ -23,6 +23,9 @@ public class RouteConfig {
         .route("copa-payment", route -> route
             .path("/payments/**")
             .uri(properties.getPaymentServiceUri().toString()))
+        .route("copa-coupon", route -> route
+            .path("/coupons/**", "/admin/coupons/**")
+            .uri(properties.getCouponServiceUri().toString()))
         .build();
   }
 }

@@ -43,6 +43,12 @@ public class OrderCommandService {
     return order;
   }
 
+  // 쿠폰 선점으로 확정된 할인액을 주문에 반영(결제 전).
+  @Transactional
+  public void applyCouponDiscount(Long orderId, BigDecimal discount) {
+    getOrder(orderId).applyCouponDiscount(discount);
+  }
+
   @Transactional
   public void markPaymentCompleted(Long orderId) {
     Order order = getOrder(orderId);
