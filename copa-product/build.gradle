@@ -27,6 +27,9 @@ dependencies {
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'
 
+    // 상품 생성 이벤트를 outbox 릴레이가 Kafka로 발행한다.
+    implementation 'org.springframework.kafka:spring-kafka'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 

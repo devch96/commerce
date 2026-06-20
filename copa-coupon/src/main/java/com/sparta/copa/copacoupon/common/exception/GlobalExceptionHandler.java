@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -43,6 +44,15 @@ public class GlobalExceptionHandler {
     log.warn("데이터 무결성 위반", e);
     return ResponseEntity.status(HttpStatus.CONFLICT)
         .body(ApiResponse.error("이미 존재하거나 충돌하는 데이터입니다."));
+  }
+
+  // @Version 충돌(동시 발급·예약 경합)은 재시도 가능한 일시 충돌이므로 500이 아닌 409로 구분해 반환한다.
+  @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+  public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(
+      ObjectOptimisticLockingFailureException e) {
+    log.warn("낙관적 락 충돌", e);
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ApiResponse.error("동시 요청으로 충돌이 발생했습니다. 다시 시도해 주세요."));
   }
 
   // 예상 못 한 예외는 스택트레이스를 응답에 노출하지 않고 로깅 후 공통 봉투로 500을 반환한다.

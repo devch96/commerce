@@ -15,3 +15,9 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+
+# 테스트는 브로커가 없으므로 outbox 릴레이를 끈다(스케줄 발행 비활성).
+copa:
+  outbox:
+    relay:
+      enabled: false

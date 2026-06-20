@@ -22,7 +22,8 @@ public enum ErrorCode {
   OPTION_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "옵션이 없는 상품에는 옵션을 지정할 수 없습니다."),
   OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 옵션을 찾을 수 없습니다."),
   CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니에 해당 상품이 없습니다."),
-  ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 작업을 수행할 권한이 없습니다.");
+  ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 작업을 수행할 권한이 없습니다."),
+  OUTBOX_SERIALIZATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이벤트 직렬화에 실패했습니다.");
 
   private final HttpStatus status;
   private final String message;

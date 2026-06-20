@@ -5,6 +5,7 @@ import com.sparta.copa.copaproduct.category.service.CategoryService;
 import com.sparta.copa.copaproduct.common.enums.ProductStatus;
 import com.sparta.copa.copaproduct.common.exception.BusinessException;
 import com.sparta.copa.copaproduct.common.exception.ErrorCode;
+import com.sparta.copa.copaproduct.outbox.OutboxRecorder;
 import com.sparta.copa.copaproduct.product.domain.Product;
 import com.sparta.copa.copaproduct.product.domain.ProductCategory;
 import com.sparta.copa.copaproduct.product.dto.request.ProductCreateRequest;
@@ -40,6 +41,7 @@ public class ProductService {
   private final ProductCategoryRepository productCategoryRepository;
   private final CategoryService categoryService;
   private final ProductCacheService productCacheService;
+  private final OutboxRecorder outboxRecorder;
 
   @Transactional
   public ProductResponse createProduct(Long sellerId, ProductCreateRequest request) {
@@ -56,6 +58,8 @@ public class ProductService {
         request.getOptions(),
         request.getOptionDiscounts()));
     linkCategories(product, categories);
+    // 같은 트랜잭션에 outbox 이벤트를 적재 → 릴레이가 Kafka로 발행 → 재고 서비스가 옵션별 재고를 시드.
+    outboxRecorder.recordProductCreated(product);
     return ProductResponse.from(product, request.getCategoryIds());
   }
 
@@ -70,6 +74,16 @@ public class ProductService {
         products.getContent().stream().map(Product::getId).toList());
     return products.map(
         product -> ProductResponse.from(product, categoryIdsByProduct.getOrDefault(product.getId(), List.of())));
+  }
+
+  // 공개 상세 조회: 비공개 상태(HIDDEN/DISCONTINUED)는 목록과 동일하게 404로 가린다(내부 API는 getProduct로 전체 접근).
+  @Transactional(readOnly = true)
+  public ProductResponse getPublicProduct(Long productId) {
+    ProductResponse product = getProduct(productId);
+    if (!PUBLICLY_VISIBLE.contains(product.getStatus())) {
+      throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
+    }
+    return product;
   }
 
   // Look-Aside: 캐시 HIT이면 그대로, MISS면 DB 조회 후 캐시에 적재한다.

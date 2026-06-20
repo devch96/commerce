@@ -59,6 +59,21 @@ public class InventoryService {
     return InventoryResponse.from(inventory);
   }
 
+  /**
+   * 멱등 시드(상품 생성 이벤트 소비). 해당 (productId, optionKey) 재고가 없을 때만 생성한다.
+   * 이미 있으면 절대 덮어쓰지 않는다 — 이벤트 중복 전달로 예약/차감된 재고가 초기값으로 리셋되는 것을 막는다.
+   */
+  @Transactional
+  public void seedIfAbsent(Long productId, String optionKey, int stock) {
+    String key = normalize(optionKey);
+    if (inventoryRepository.findByProductIdAndOptionKey(productId, key).isPresent()) {
+      log.debug("재고 이미 존재, 시드 건너뜀: productId={}, optionKey='{}'", productId, key);
+      return;
+    }
+    inventoryRepository.save(Inventory.create(productId, key, stock));
+    log.debug("재고 시드: productId={}, optionKey='{}', stock={}", productId, key, stock);
+  }
+
   @Transactional(readOnly = true)
   public InventoryResponse getInventory(Long productId, String optionKey) {
     Inventory inventory = inventoryRepository

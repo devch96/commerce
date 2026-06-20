@@ -14,7 +14,9 @@ public interface UserCouponRepository extends JpaRepository<UserCoupon, Long> {
   // 1인 1매 판단(발급 전 선검사, 최종 방어선은 DB 유니크 제약).
   boolean existsByCoupon_IdAndUserId(Long couponId, Long userId);
 
-  List<UserCoupon> findByUserId(Long userId);
+  // 내 쿠폰 목록: 응답이 coupon 정의 필드(name 등)에 접근하므로 fetch join으로 N+1을 막는다.
+  @Query("select uc from UserCoupon uc join fetch uc.coupon where uc.userId = :userId")
+  List<UserCoupon> findByUserId(@Param("userId") Long userId);
 
   // reserve/use/release: 상태 전이를 비관적 락으로 직렬화(동시 confirm/release 경합 차단).
   @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -13,26 +13,25 @@
 ```
 3. Resource/개인 공부/MSA 아키텍처 트랙/Final/
 ├── 설계/
-│   ├── 00. 빌드 순서 & 공통 설계.md
-│   ├── 01. 회원·인증 서비스.md
-│   ├── 02. 상품 서비스.md
-│   ├── 03. 재고 서비스.md
-│   ├── 04. 주문 서비스.md
-│   ├── 05. 결제 서비스.md
-│   ├── 06. 검색 서비스.md
-│   ├── 07. 리뷰 서비스.md
-│   ├── 08. AI 추천·상담 서비스.md
-│   ├── 09. 프로모션·쿠폰 & 플래시세일.md
-│   ├── 10. 권장 기능 목록.md
-│   ├── 11. AI 기반 MSA 이커머스 플랫폼 설계.md
-│   └── 12. 권장 기능 정합성 & 설계 보정.md
+│   ├── 00. 권장 기능 목록.md
+│   ├── 01. 프로젝트 개요 & 아키텍처.md
+│   ├── 02. 빌드 순서 & 공통 설계.md
+│   ├── 03. 회원·인증 서비스.md
+│   ├── 04. 상품 서비스.md
+│   ├── 05. 재고 서비스.md
+│   ├── 06. 주문 서비스.md
+│   ├── 07. 결제 서비스.md
+│   ├── 08. 프로모션·쿠폰 & 플래시세일.md
+│   ├── 09. 검색 서비스.md
+│   ├── 10. 리뷰 서비스.md
+│   └── 11. AI 추천·상담 서비스.md
 └── 13주차/
     ├── 1일차) 프로젝트 계획 수립.md
     └── 주차 별 프로젝트 작업 플랜 가이드.md
 ```
 
 > 사용자가 명시적으로 다른 자료를 지정하지 않는 한, 특정 서비스(회원/상품/재고/주문/결제 등)를 작업할 때는
-> 해당 서비스의 설계 문서와 `00. 빌드 순서 & 공통 설계.md`를 함께 읽고 그 설계를 기준으로 구현한다.
+> 해당 서비스의 설계 문서와 `02. 빌드 순서 & 공통 설계.md`를 함께 읽고 그 설계를 기준으로 구현한다.
 > 빌드/구현 순서와 주차별 범위는 `13주차/주차 별 프로젝트 작업 플랜 가이드.md`를 따른다.
 
 ## 코딩 컨벤션
@@ -93,10 +92,13 @@
   상품 삭제는 물리 삭제가 아니라 **soft delete**(`deleted` 플래그)로 처리한다.
   상품 옵션은 **무한 뎁스 JSON 트리**(`options`, leaf=선언적 초기 재고)이고 `optionKey`(`색상:네이비/사이즈:M`)로 접근한다.
   옵션별/조합별 할인(`optionDiscounts`)은 prefix=옵션별·full path=조합별이며 **최장 일치 우선**. 쿠폰은 프로모션 서비스 소관.
+  상품 생성 시 **Transactional Outbox**(`outbox_events`)에 `PRODUCT_CREATED` 이벤트를 같은 트랜잭션으로 적재하고, 릴레이 스케줄러(`OutboxRelay`)가
+  Kafka 토픽 `product-events`로 발행한다(재고 시드용).
 - **`copa-inventory`**: 옵션(`optionKey`)별 재고의 **권위 원천**. "결제 전 예약(reserve) → 결제 후 확정(confirm)/실패 시 해제(release)" 모델로
   오버셀링을 막는다. 내부 API(`/internal/inventory/**`)만 노출(주문 Saga가 호출). 예약 핫패스는 **비관적 락**으로 직렬화(+`@Version` 낙관적 락),
-  reserve/confirm/release는 모두 **멱등**, 미결제 예약은 **TTL 스케줄러**가 자동 해제. 상품의 옵션 leaf를 `register`로 시드한다.
-  DB는 **MySQL**(`copa-inventory-mysql`), Redis 없음. Kafka Saga 연동은 11주차 예정(현재는 동기 REST 골격).
+  reserve/confirm/release는 모두 **멱등**, 미결제 예약은 **TTL 스케줄러**가 자동 해제.
+  재고 시드는 Kafka `product-events`(`PRODUCT_CREATED`) 구독으로 옵션 leaf별 `seedIfAbsent`(insert-if-absent, 멱등) 처리한다(`register` 내부 API는 보정용).
+  DB는 **MySQL**(`copa-inventory-mysql`), Redis 없음. 주문 Saga의 Kafka 전환은 후속 단계(현재는 동기 REST 골격).
 - **`copa-payment`**: 가상 PG(mock) 결제. 주문 Saga의 결제 단계를 수행(재고 예약 성공 후에만 호출). `Payment(orderId 유니크)`로
   멱등, 결과 status(APPROVED/FAILED)로 주문이 confirm/release 분기. 내부 API(`/internal/payments`)·조회(`/payments/{orderId}`).
   `PaymentGateway` 인터페이스 뒤에 `MockPaymentGateway`(추후 실 PG 교체). DB는 **MySQL**(`copa-payment-mysql`).
@@ -118,7 +120,8 @@
 ## 인프라
 
 `docker-compose.yml` — 회원·인증(`copa-user`)용 MySQL 8.0 + Redis 7.2, 상품(`copa-product`)용 MySQL 8.0 + Redis 7.2(조회 캐시),
-재고(`copa-inventory`)용 MySQL 8.0, 결제(`copa-payment`)·주문(`copa-order`)·쿠폰(`copa-coupon`)용 MySQL 8.0.
+재고(`copa-inventory`)용 MySQL 8.0, 결제(`copa-payment`)·주문(`copa-order`)·쿠폰(`copa-coupon`)용 MySQL 8.0,
+이벤트 버스 **Kafka**(KRaft 단일 노드).
 
 ```bash
 docker compose up -d
@@ -132,7 +135,8 @@ docker compose up -d
 - `copa-payment-mysql`: 3309→3306, db=`copa_payment`, user=`copa`/`copa` (root=`root`)
 - `copa-order-mysql`: 3310→3306, db=`copa_order`, user=`copa`/`copa` (root=`root`)
 - `copa-coupon-mysql`: 3311→3306, db=`copa_coupon`, user=`copa`/`copa` (root=`root`)
-- Kafka(주문 Saga·쿠폰 선착순)는 추후 추가 예정(쿠폰 Phase 2~3).
+- `copa-kafka`: 9092 (KRaft 단일 노드, advertised `localhost:9092`). 첫 이벤트 흐름은 상품 생성 → 재고 시드(토픽 `product-events`).
+  주문 Saga·쿠폰 선착순의 Kafka 전환은 후속 단계.
 
 > 참고: `.clauderules`는 PostgreSQL을 명시하지만 설계 문서와 실제 인프라(`docker-compose.yml`)는
 > **MySQL 8.0** 기준이다. 이 프로젝트는 MySQL로 진행하며, Flyway도 `flyway-mysql`을 쓴다.

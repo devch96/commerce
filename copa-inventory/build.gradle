@@ -26,6 +26,9 @@ dependencies {
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'
 
+    // 상품 생성 이벤트(product-events)를 구독해 옵션별 재고를 시드한다.
+    implementation 'org.springframework.kafka:spring-kafka'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 

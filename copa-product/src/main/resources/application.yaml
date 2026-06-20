@@ -26,3 +26,19 @@ spring:
       # 상품 상세 조회 Look-Aside 캐시 전용. copa-auth-redis(6379)와 분리.
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # 유실 0을 위해 모든 ISR 확인 + 멱등 프로듀서.
+      acks: all
+      properties:
+        enable.idempotence: true
+
+# outbox 릴레이: 미발행 이벤트를 폴링해 Kafka로 발행한다.
+copa:
+  outbox:
+    relay:
+      enabled: true
+      poll-interval-ms: 2000

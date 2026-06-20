@@ -22,3 +22,11 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: copa-inventory
+      # 컨슈머 그룹이 처음 붙을 때 누락 없이 처음부터 소비(시드 이벤트 유실 방지).
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer

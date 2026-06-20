@@ -106,7 +106,12 @@ public class Order {
     if (status != OrderStatus.ORDER_PLACED) {
       throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
     }
-    this.discountAmount = discount == null ? BigDecimal.ZERO : discount;
+    BigDecimal resolved = discount == null ? BigDecimal.ZERO : discount;
+    // 쿠폰 서비스 응답을 신뢰 경계로 보고 0 ≤ 할인 ≤ 주문총액을 강제(음수/총액 초과 할인으로 인한 0원·음수 결제 차단).
+    if (resolved.signum() < 0 || resolved.compareTo(totalAmount) > 0) {
+      throw new BusinessException(ErrorCode.COUPON_NOT_APPLICABLE);
+    }
+    this.discountAmount = resolved;
   }
 
   // 결제 성공 확정.

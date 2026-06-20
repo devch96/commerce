@@ -47,7 +47,7 @@ public class ProductController {
 
   @GetMapping("/{productId}")
   public ApiResponse<ProductResponse> getProduct(@PathVariable Long productId) {
-    return ApiResponse.success(productService.getProduct(productId));
+    return ApiResponse.success(productService.getPublicProduct(productId));
   }
 
   // 상품 등록은 SELLER 이상. 등록자가 곧 소유 판매자(sellerId)가 된다.

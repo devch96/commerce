@@ -11,3 +11,9 @@ spring:
     hibernate:
       ddl-auto: create-drop
     database-platform: org.hibernate.dialect.H2Dialect
+  # 테스트는 브로커가 없으므로 Kafka 리스너 자동 기동을 막는다(컨텍스트 로딩만).
+  kafka:
+    listener:
+      auto-startup: false
+    consumer:
+      group-id: copa-inventory-test
