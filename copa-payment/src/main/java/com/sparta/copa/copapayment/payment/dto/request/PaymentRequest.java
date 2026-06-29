@@ -20,9 +20,9 @@ public class PaymentRequest {
   private Long orderId;
 
   @NotNull
-  private Long userId;
+  private String paymentKey;
 
   @NotNull
   @Positive
-  private BigDecimal amount;
+  private Long amount;
 }

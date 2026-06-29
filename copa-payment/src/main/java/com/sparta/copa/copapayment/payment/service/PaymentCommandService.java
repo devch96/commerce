@@ -1,11 +1,14 @@
 package com.sparta.copa.copapayment.payment.service;
 
+import com.sparta.copa.copapayment.common.exception.BusinessException;
+import com.sparta.copa.copapayment.common.exception.ErrorCode;
 import com.sparta.copa.copapayment.payment.domain.Payment;
 import com.sparta.copa.copapayment.payment.dto.request.PaymentRequest;
 import com.sparta.copa.copapayment.payment.dto.response.PaymentResponse;
 import com.sparta.copa.copapayment.payment.gateway.PaymentGateway;
 import com.sparta.copa.copapayment.payment.gateway.PgApproval;
 import com.sparta.copa.copapayment.payment.repository.PaymentRepository;
+import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,16 +24,26 @@ public class PaymentCommandService {
   private final PaymentRepository paymentRepository;
   private final PaymentGateway paymentGateway;
 
-  /**
-   * 신규 결제 1건을 생성한다. orderId 유니크 위반은 saveAndFlush로 PG 호출 전에 즉시 드러내,
-   * 동시 중복 요청 시 이중 승인(이중 청구)을 막는다(예외는 호출자가 멱등 재조회로 흡수).
-   */
+  // 1단계: 트랜잭션을 켜고 일단 PENDING(결제진행중) 상태로 DB에 확실히 박아넣고 커밋까지 끝낸다.
   @Transactional
-  public PaymentResponse process(PaymentRequest request) {
-    Payment payment = paymentRepository.saveAndFlush(
-        Payment.request(request.getOrderId(), request.getUserId(), request.getAmount()));
+  public Payment createPendingPayment(Long userId, PaymentRequest request) {
+    // saveAndFlush로 유니크 제약조건 위반을 여기서 즉시 터트림
+    return paymentRepository.saveAndFlush(
+        Payment.request(request.getOrderId(), userId, request.getAmount())
+    );
+  }
 
-    PgApproval approval = paymentGateway.approve(request.getOrderId(), request.getAmount());
+  // 2단계: 외부 PG API를 찌른다 (트랜잭션 없음 -> 스레드 대기 오버헤드 최소화)
+  public PgApproval requestPgApproval(Long orderId, BigDecimal amount) {
+    return paymentGateway.approve(orderId, amount);
+  }
+
+  // 3단계: 트랜잭션을 다시 켜고 PG 결과를 DB에 최종 반영한다.
+  @Transactional
+  public PaymentResponse updateStatus(Long orderId, PgApproval approval) {
+    Payment payment = paymentRepository.findByOrderId(orderId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
     if (approval.isApproved()) {
       payment.approve(approval.getTransactionId());
     } else {

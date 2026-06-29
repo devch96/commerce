@@ -8,7 +8,7 @@ import java.math.BigDecimal;
  */
 public interface PaymentGateway {
 
-  PgApproval approve(Long orderId, BigDecimal amount);
+  PgApproval approve(PgAuthPayload authPayload, Long orderId, Long amount);
 
   void cancel(String pgTransactionId);
 }

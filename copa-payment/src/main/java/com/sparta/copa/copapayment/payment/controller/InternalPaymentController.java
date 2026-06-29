@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,12 +19,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class InternalPaymentController {
 
+  private static final String USER_ID_HEADER = "X-User-Id";
+
   private final PaymentService paymentService;
 
   // 결제 시도. 응답의 status(APPROVED/FAILED)로 주문이 confirm/release를 분기한다.
   @PostMapping
-  public ApiResponse<PaymentResponse> pay(@Valid @RequestBody PaymentRequest request) {
-    return ApiResponse.success(paymentService.pay(request));
+  public ApiResponse<PaymentResponse> pay(@RequestHeader(USER_ID_HEADER) Long userId,
+      @Valid @RequestBody PaymentRequest request) {
+    return ApiResponse.success(paymentService.pay(userId, request));
   }
 
   // 결제 취소(보상).

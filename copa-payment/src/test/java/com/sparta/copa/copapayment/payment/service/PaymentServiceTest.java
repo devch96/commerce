@@ -40,7 +40,7 @@ class PaymentServiceTest {
   private PaymentService paymentService;
 
   private PaymentRequest request() {
-    return PaymentRequest.builder().orderId(1L).userId(7L).amount(BigDecimal.valueOf(10000)).build();
+    return PaymentRequest.builder().orderId(1L).amount(BigDecimal.valueOf(10000)).build();
   }
 
   @Test

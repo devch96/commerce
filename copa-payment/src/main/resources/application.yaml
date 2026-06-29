@@ -21,3 +21,15 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  cloud:
+    openfeign:
+      client:
+        config:
+          tossPaymentClient: # FeignClient의 name과 일치해야 함
+            connectTimeout: 3000 # 3초 (연결 타임아웃)
+            readTimeout: 5000    # 5초 (응답 대기 타임아웃)
+            loggerLevel: full
+
+toss:
+  secret-key: test_sk_xxxxxx # 개발자 센터에서 발급받은 시크릿 키
+

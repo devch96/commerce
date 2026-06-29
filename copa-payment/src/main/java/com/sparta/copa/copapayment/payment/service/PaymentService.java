@@ -6,6 +6,7 @@ import com.sparta.copa.copapayment.payment.domain.Payment;
 import com.sparta.copa.copapayment.payment.dto.request.PaymentRequest;
 import com.sparta.copa.copapayment.payment.dto.response.PaymentResponse;
 import com.sparta.copa.copapayment.payment.gateway.PaymentGateway;
+import com.sparta.copa.copapayment.payment.gateway.PgApproval;
 import com.sparta.copa.copapayment.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,16 +31,25 @@ public class PaymentService {
    * 동시 중복 요청으로 유니크 충돌이 나면, 먼저 성공한 결제를 재조회해 멱등하게 반환한다(이중 청구 없음).
    * PG가 거절하면 FAILED로 기록해 반환(예외 대신) → 주문 Saga가 상태로 분기하고 기록도 남는다.
    */
-  public PaymentResponse pay(PaymentRequest request) {
+  public PaymentResponse pay(Long userId, PaymentRequest request) {
     return paymentRepository.findByOrderId(request.getOrderId())
         .map(PaymentResponse::from)
-        .orElseGet(() -> processIdempotently(request));
+        .orElseGet(() -> processIdempotently(userId, request));
   }
 
-  private PaymentResponse processIdempotently(PaymentRequest request) {
+  private PaymentResponse processIdempotently(Long userId, PaymentRequest request) {
     try {
-      return commandService.process(request);
+      // 1. DB에 펜딩 상태 선점 (유니크 충돌 시 여기서 튕겨나감)
+      commandService.createPendingPayment(userId, request);
+
+      // 2. 트랜잭션 밖에서 안전하게 외부 PG 호출 (타임아웃이 나도 내 DB 롤백 안 됨)
+      PgApproval approval = commandService.requestPgApproval(request.getOrderId(), request.getAmount());
+
+      // 3. 결과를 DB에 최종 반영
+      return commandService.updateStatus(request.getOrderId(), approval);
+
     } catch (DataIntegrityViolationException e) {
+      // 동시성 충돌 시 기존 결제 재조회 멱등 처리
       return paymentRepository.findByOrderId(request.getOrderId())
           .map(PaymentResponse::from)
           .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));

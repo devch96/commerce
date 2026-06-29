@@ -14,13 +14,12 @@ import org.springframework.stereotype.Component;
 public class MockPaymentGateway implements PaymentGateway {
 
   @Override
-  public PgApproval approve(Long orderId, BigDecimal amount) {
-    boolean approved = amount != null && amount.compareTo(BigDecimal.ZERO) > 0;
+  public PgApproval approve(PgAuthPayload authPayload, Long orderId, Long amount) {
+    boolean approved = amount != null && amount > 0;
     String transactionId = approved ? "PG-" + UUID.randomUUID() : null;
     log.info("[MockPG] approve orderId={} amount={} -> {}", orderId, amount, approved);
     return new PgApproval(approved, transactionId);
   }
-
   @Override
   public void cancel(String pgTransactionId) {
     log.info("[MockPG] cancel txId={}", pgTransactionId);

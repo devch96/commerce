@@ -10,4 +10,12 @@ public class PgApproval {
 
   private final boolean approved;
   private final String transactionId;
+
+  public static PgApproval success(String transactionId) {
+    return new PgApproval(true, transactionId);
+  }
+
+  public static PgApproval fail() {
+    return new PgApproval(false, null);
+  }
 }
