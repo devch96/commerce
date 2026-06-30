@@ -1,10 +1,7 @@
 package com.sparta.copa.copapayment.payment.gateway.toss;
 
-import com.sparta.copa.copapayment.payment.dto.request.PaymentRequest;
-import com.sparta.copa.copapayment.payment.gateway.PaymentGateway;
 import com.sparta.copa.copapayment.payment.gateway.PgApproval;
 import com.sparta.copa.copapayment.payment.gateway.PgAuthPayload;
-import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -12,20 +9,19 @@ import org.springframework.stereotype.Component;
 @Component("TOSS")
 @RequiredArgsConstructor
 @Slf4j
-public class TossPaymentGateway implements PaymentGateway {
+public class TossPaymentGateway {
 
   private final TossPaymentClient tossPaymentClient;
 
-  @Override
-  public PgApproval approve(PgAuthPayload authPayload, Long orderId, Long amount) {
+  public PgApproval approve(PgAuthPayload authPayload, String orderId, Long amount) {
     try {
-      TossConfirmRequest request = TossConfirmRequest.builder()
+      TossApproveRequest request = TossApproveRequest.builder()
           .paymentKey(authPayload.getPgToken())
-          .orderId(String.valueOf(orderId))
+          .orderId(orderId)
           .amount(amount)
           .build();
 
-      TossConfirmResponse response = tossPaymentClient.confirmPayment(request,
+      TossApproveResponse response = tossPaymentClient.confirmPayment(request,
           String.valueOf(orderId));
       log.info("토스 승인 성공 - 주문번호: {}, 금액: {}", orderId, response.getTotalAmount());
 
@@ -39,7 +35,6 @@ public class TossPaymentGateway implements PaymentGateway {
     }
   }
 
-  @Override
   public void cancel(String pgTransactionId) {
     log.info("토스 결제 취소 요청 - PG 트랜잭션ID: {}", pgTransactionId);
   }

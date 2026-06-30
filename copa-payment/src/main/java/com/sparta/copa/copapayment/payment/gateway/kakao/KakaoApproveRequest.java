@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class KakaoApproveRequest {
+public class KakaoApproveRequest{
   private String cid;
   private String tid;
   private String partnerOrderId;

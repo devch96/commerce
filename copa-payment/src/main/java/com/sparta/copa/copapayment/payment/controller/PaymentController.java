@@ -18,7 +18,7 @@ public class PaymentController {
   private final PaymentService paymentService;
 
   @GetMapping("/{orderId}")
-  public ApiResponse<PaymentResponse> getPayment(@PathVariable Long orderId) {
+  public ApiResponse<PaymentResponse> getPayment(@PathVariable String orderId) {
     return ApiResponse.success(paymentService.getByOrderId(orderId));
   }
 }

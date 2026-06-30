@@ -10,12 +10,12 @@ import lombok.Getter;
 @Builder
 public class PaymentResponse {
 
-  private final Long orderId;
+  private final String orderId;
   private final Long userId;
-  private final BigDecimal amount;
+  private final Long amount;
   private final PaymentStatus status;
   private final String pgTransactionId;
-  private final BigDecimal refundedAmount;
+  private final Long refundedAmount;
 
   public static PaymentResponse from(Payment payment) {
     return PaymentResponse.builder()

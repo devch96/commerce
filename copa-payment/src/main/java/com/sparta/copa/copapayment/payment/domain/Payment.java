@@ -41,13 +41,13 @@ public class Payment {
   private Long id;
 
   @Column(name = "order_id", nullable = false, unique = true)
-  private Long orderId;
+  private String orderId;
 
   @Column(name = "user_id", nullable = false)
   private Long userId;
 
   @Column(nullable = false, precision = 19, scale = 2)
-  private BigDecimal amount;
+  private Long amount;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
@@ -59,7 +59,7 @@ public class Payment {
 
   // 누적 환불액(부분 환불 대비).
   @Column(name = "refunded_amount", nullable = false, precision = 19, scale = 2)
-  private BigDecimal refundedAmount;
+  private Long refundedAmount;
 
   @CreatedDate
   @Column(updatable = false)
@@ -69,16 +69,16 @@ public class Payment {
   private LocalDateTime updatedAt;
 
   @Builder
-  private Payment(Long orderId, Long userId, BigDecimal amount, PaymentStatus status) {
+  private Payment(String orderId, Long userId, Long amount, PaymentStatus status) {
     this.orderId = orderId;
     this.userId = userId;
     this.amount = amount;
     this.status = status;
-    this.refundedAmount = BigDecimal.ZERO;
+    this.refundedAmount = 0L;
   }
 
-  public static Payment request(Long orderId, Long userId, BigDecimal amount) {
-    if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+  public static Payment request(String orderId, Long userId, Long amount) {
+    if (amount == null || amount <= 0) {
       throw new BusinessException(ErrorCode.INVALID_AMOUNT);
     }
     return Payment.builder()
