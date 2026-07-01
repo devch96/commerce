@@ -2,7 +2,9 @@ package com.sparta.copa.copaorder.order.controller;
 
 import com.sparta.copa.copaorder.common.enums.OrderStatus;
 import com.sparta.copa.copaorder.common.response.ApiResponse;
+import com.sparta.copa.copaorder.order.dto.request.ConfirmPaymentRequest;
 import com.sparta.copa.copaorder.order.dto.request.CreateOrderRequest;
+import com.sparta.copa.copaorder.order.dto.response.OrderCheckoutResponse;
 import com.sparta.copa.copaorder.order.dto.response.OrderResponse;
 import com.sparta.copa.copaorder.order.service.OrderService;
 import jakarta.validation.Valid;
@@ -29,12 +31,26 @@ public class OrderController {
 
   private final OrderService orderService;
 
-  // 주문 생성(Saga 시작). 가격 스냅샷→예약→결제→확정/보상.
+  // 주문 생성(Saga Phase 1). 가격 스냅샷→예약→(카카오)ready. 결제창 오픈 정보를 반환한다.
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  public ApiResponse<OrderResponse> create(@RequestHeader(USER_ID_HEADER) Long userId,
+  public ApiResponse<OrderCheckoutResponse> create(@RequestHeader(USER_ID_HEADER) Long userId,
       @Valid @RequestBody CreateOrderRequest request) {
     return ApiResponse.success(orderService.createOrder(userId, request));
+  }
+
+  // 결제 확정(Saga Phase 2). 프론트가 PG 리다이렉트 후 토큰을 담아 호출한다.
+  @PostMapping("/{orderId}/payment/confirm")
+  public ApiResponse<OrderResponse> confirmPayment(@RequestHeader(USER_ID_HEADER) Long userId,
+      @PathVariable Long orderId, @Valid @RequestBody ConfirmPaymentRequest request) {
+    return ApiResponse.success(orderService.confirmPayment(userId, orderId, request));
+  }
+
+  // 결제 실패/취소(failUrl 경유). 예약 해제 + 주문 취소.
+  @PostMapping("/{orderId}/payment/fail")
+  public ApiResponse<OrderResponse> failPayment(@RequestHeader(USER_ID_HEADER) Long userId,
+      @PathVariable Long orderId) {
+    return ApiResponse.success(orderService.failPayment(userId, orderId));
   }
 
   // 내 주문 목록(상태별 필터 선택).

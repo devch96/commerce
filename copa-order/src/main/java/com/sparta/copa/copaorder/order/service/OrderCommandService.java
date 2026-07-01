@@ -39,7 +39,7 @@ public class OrderCommandService {
           order, line.getProductId(), line.getOptionKey(), line.getQuantity(), line.getPrice()));
     }
     historyRepository.save(
-        OrderStatusHistory.of(order.getId(), null, OrderStatus.ORDER_PLACED, "주문 생성"));
+        OrderStatusHistory.of(order.getId(), null, OrderStatus.PENDING_PAYMENT, "주문 생성"));
     return order;
   }
 

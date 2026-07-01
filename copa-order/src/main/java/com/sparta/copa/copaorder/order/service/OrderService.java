@@ -1,6 +1,7 @@
 package com.sparta.copa.copaorder.order.service;
 
 import com.sparta.copa.copaorder.common.enums.OrderStatus;
+import com.sparta.copa.copaorder.common.enums.PgProvider;
 import com.sparta.copa.copaorder.common.exception.BusinessException;
 import com.sparta.copa.copaorder.common.exception.ErrorCode;
 import com.sparta.copa.copaorder.order.client.CouponClient;
@@ -9,13 +10,17 @@ import com.sparta.copa.copaorder.order.client.PaymentClient;
 import com.sparta.copa.copaorder.order.client.ProductClient;
 import com.sparta.copa.copaorder.order.client.dto.OptionPriceView;
 import com.sparta.copa.copaorder.order.client.dto.PaymentView;
+import com.sparta.copa.copaorder.order.client.dto.PgReadyView;
 import com.sparta.copa.copaorder.order.client.dto.ReserveLine;
 import com.sparta.copa.copaorder.order.domain.Order;
+import com.sparta.copa.copaorder.order.dto.request.ConfirmPaymentRequest;
 import com.sparta.copa.copaorder.order.dto.request.CreateOrderRequest;
 import com.sparta.copa.copaorder.order.dto.request.OrderLineRequest;
+import com.sparta.copa.copaorder.order.dto.response.OrderCheckoutResponse;
 import com.sparta.copa.copaorder.order.dto.response.OrderResponse;
 import com.sparta.copa.copaorder.order.repository.OrderRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -23,11 +28,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * 주문 Saga 오케스트레이터(동기). 외부 호출(상품·재고·결제)을 순서대로 수행하고,
- * DB 변경은 OrderCommandService(트랜잭션), 조회는 OrderQueryService(읽기 트랜잭션)에 위임한다.
- * 트랜잭션 메서드를 별도 빈으로 둬 self-invocation으로 인한 트랜잭션 미적용을 피한다.
- *
- * <pre>가격 스냅샷 → 주문 생성 → 재고 예약 → 결제 → (성공)재고 확정·완료 / (실패)보상·취소</pre>
+ * 주문 Saga 오케스트레이터(동기, PG 결제창 방식). 결제가 리다이렉트를 사이에 두므로 2단계로 나뉜다.
+ * <pre>
+ * Phase 1 createOrder : 가격 스냅샷 → 주문(PENDING_PAYMENT) → 쿠폰·재고 예약 → (카카오)ready → 결제창 오픈 정보 반환
+ * Phase 2 confirmPayment : 결제 승인 → (성공)재고 확정·쿠폰 사용·완료 / (실패)보상·취소
+ * </pre>
+ * DB 변경은 OrderCommandService(트랜잭션), 조회는 OrderQueryService(읽기)에 위임한다(self-invocation 회피).
  */
 @Slf4j
 @Service
@@ -45,7 +51,8 @@ public class OrderService {
   // 결제 승인 후 재고 확정 재시도 횟수(confirm은 멱등이라 안전하게 반복 가능). 정식 백오프/서킷브레이커는 추후 Resilience4j.
   private static final int CONFIRM_MAX_ATTEMPTS = 3;
 
-  public OrderResponse createOrder(Long userId, CreateOrderRequest request) {
+  // ===== Phase 1: 주문 생성 + 예약 (+카카오 ready). 결제창 오픈 정보 반환 =====
+  public OrderCheckoutResponse createOrder(Long userId, CreateOrderRequest request) {
     // 1. 상품 서비스로 옵션별 현재가를 받아 주문 시점 가격을 스냅샷.
     List<PricedLine> lines = new ArrayList<>();
     for (OrderLineRequest item : request.getItems()) {
@@ -54,12 +61,11 @@ public class OrderService {
           item.getQuantity(), priced.getFinalPrice()));
     }
 
-    // 2. 주문 생성(ORDER_PLACED). 이후 단계는 보상 가능한 외부 호출.
+    // 2. 주문 생성(PENDING_PAYMENT). 이후 예약·ready는 보상 가능한 외부 호출.
     Order order = commandService.createPlacedOrder(userId, lines, request.getCouponId());
     Long orderId = order.getId();
     Long couponId = request.getCouponId();
 
-    // 3~5. 결제 승인 전까지가 "보상(roll-back) 가능" 구간. 여기서 실패하면 쿠폰·예약 해제 + 주문 취소.
     boolean couponReserved = false;
     boolean reserved = false;
     try {
@@ -75,18 +81,77 @@ public class OrderService {
       reserved = true;
 
       BigDecimal payable = order.getTotalAmount().subtract(discount).max(BigDecimal.ZERO);
-      PaymentView payment = paymentClient.pay(orderId, userId, payable);
-      if (!payment.isApproved()) {
-        throw new BusinessException(ErrorCode.PAYMENT_FAILED);
+      String orderName = resolveOrderName(request, lines);
+
+      // 카카오는 결제창 진입 전 서버 ready가 필요(tid·리다이렉트 URL 발급). 토스는 프론트 SDK가 처리.
+      String redirectUrl = null;
+      if (request.getPgProvider() == PgProvider.KAKAO) {
+        PgReadyView ready = paymentClient.kakaoReady(orderId, userId, toWon(payable), orderName);
+        redirectUrl = ready.getRedirectUrl();
       }
+      return OrderCheckoutResponse.of(orderId, payable, orderName, request.getPgProvider(), redirectUrl);
+
     } catch (BusinessException e) {
       compensate(orderId, couponReserved, reserved, e);
       throw e;
     }
+  }
 
-    // 6. 결제 승인(캡처) 완료. 이후 재고 확정·쿠폰 사용·주문 완료는 되돌리지 않고 전진(roll-forward)으로 완결한다.
-    //    이미 받은 결제를 보상(환불·예약해제)으로 되돌리면 결제·재고 정합이 깨지므로 재시도로 마감한다.
+  // ===== Phase 2: 결제 확정. 프론트가 PG 리다이렉트 후 토큰을 담아 호출 =====
+  public OrderResponse confirmPayment(Long userId, Long orderId, ConfirmPaymentRequest request) {
+    Order order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+    if (!order.isOwnedBy(userId)) {
+      throw new BusinessException(ErrorCode.ACCESS_DENIED);
+    }
+    if (order.getStatus() == OrderStatus.PAYMENT_COMPLETED) {
+      return queryService.getOwnedOrder(orderId, userId); // 멱등
+    }
+    if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+      throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+    }
+
+    boolean couponReserved = order.getCouponId() != null;
+    // 결제 금액은 서버가 저장한 payable을 신뢰 원천으로 사용(클라 금액 미신뢰). 위조 결제는 PG가 금액 불일치로 거절.
+    Long payable = toWon(order.payableAmount());
+
+    PaymentView payment;
+    try {
+      payment = switch (request.getPgProvider()) {
+        case TOSS -> paymentClient.tossConfirm(orderId, userId, payable, request.getPaymentKey());
+        case KAKAO -> paymentClient.kakaoConfirm(orderId, userId, request.getPgToken());
+      };
+    } catch (BusinessException e) {
+      compensate(orderId, couponReserved, true, e);
+      throw e;
+    }
+
+    if (!payment.isApproved()) {
+      BusinessException failed = new BusinessException(ErrorCode.PAYMENT_FAILED);
+      compensate(orderId, couponReserved, true, failed);
+      throw failed;
+    }
+
+    // 결제 승인(캡처) 완료. 이후 재고 확정·쿠폰 사용·주문 완료는 되돌리지 않고 전진(roll-forward)으로 완결.
     completePaidOrder(orderId, couponReserved);
+    return queryService.getOwnedOrder(orderId, userId);
+  }
+
+  // failUrl 처리: 사용자가 결제창에서 취소/실패로 돌아옴 → 예약 해제 + 주문 취소.
+  public OrderResponse failPayment(Long userId, Long orderId) {
+    Order order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+    if (!order.isOwnedBy(userId)) {
+      throw new BusinessException(ErrorCode.ACCESS_DENIED);
+    }
+    if (order.getStatus() == OrderStatus.CANCELLED) {
+      return queryService.getOwnedOrder(orderId, userId); // 멱등
+    }
+    if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+      throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
+    }
+    compensate(orderId, order.getCouponId() != null, true,
+        new BusinessException(ErrorCode.PAYMENT_FAILED));
     return queryService.getOwnedOrder(orderId, userId);
   }
 
@@ -104,7 +169,7 @@ public class OrderService {
   }
 
   // 결제 승인 후 마감(roll-forward): 재고 확정 + 쿠폰 사용(멱등 재시도) → 주문 완료. 실패해도 환불/해제하지 않고
-  // 후속 복구가 재처리하도록 ORDER_PLACED로 남긴 채 실패를 드러낸다(결제는 이미 캡처됨).
+  // 후속 복구가 재처리하도록 PENDING_PAYMENT로 남긴 채 실패를 드러낸다(결제는 이미 캡처됨).
   private void completePaidOrder(Long orderId, boolean couponUsed) {
     try {
       confirmWithRetry(orderId);
@@ -172,6 +237,19 @@ public class OrderService {
       result.add(new ReserveLine(line.getProductId(), line.getOptionKey(), line.getQuantity()));
     }
     return result;
+  }
+
+  // 결제창 표시용 주문명. 지정이 없으면 품목 수 기반 기본값(카카오 item_name은 비어 있으면 안 됨).
+  private String resolveOrderName(CreateOrderRequest request, List<PricedLine> lines) {
+    if (request.getOrderName() != null && !request.getOrderName().isBlank()) {
+      return request.getOrderName();
+    }
+    return lines.size() == 1 ? "주문 상품 1건" : "주문 상품 외 " + lines.size() + "건";
+  }
+
+  // BigDecimal(원) → PG 전달용 Long(원). 통화 규약상 소수는 없다.
+  private Long toWon(BigDecimal amount) {
+    return amount.setScale(0, RoundingMode.HALF_UP).longValueExact();
   }
 
   private void safe(Runnable action, Long orderId, String step) {

@@ -29,7 +29,22 @@ spring:
             connectTimeout: 3000 # 3초 (연결 타임아웃)
             readTimeout: 5000    # 5초 (응답 대기 타임아웃)
             loggerLevel: full
+          kakaoPaymentClient:
+            connectTimeout: 3000
+            readTimeout: 5000
+            loggerLevel: full
 
+# 시크릿 키는 환경변수로 주입한다(리포지토리에 실 키 커밋 금지). 로컬 기본값은 더미.
 toss:
-  secret-key: test_sk_xxxxxx # 개발자 센터에서 발급받은 시크릿 키
+  secret-key: ${TOSS_SECRET_KEY:test_sk_dummy}
+kakao:
+  secret-key: ${KAKAO_SECRET_KEY:DEV_KAKAO_DUMMY}
+
+# 카카오 결제 설정. 리다이렉트 URL은 프론트 라우트로 두고, 프론트가 pg_token을 받아 confirm API를 호출한다.
+payment:
+  kakao:
+    cid: ${KAKAO_CID:TC0ONETIME}
+    approval-url: ${KAKAO_APPROVAL_URL:http://localhost:3000/payments/kakao/success}
+    cancel-url: ${KAKAO_CANCEL_URL:http://localhost:3000/payments/kakao/cancel}
+    fail-url: ${KAKAO_FAIL_URL:http://localhost:3000/payments/kakao/fail}
 

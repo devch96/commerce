@@ -1,7 +1,9 @@
 package com.sparta.copa.copaorder.order.dto.request;
 
+import com.sparta.copa.copaorder.common.enums.PgProvider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -22,4 +24,11 @@ public class CreateOrderRequest {
 
   // 적용 쿠폰(선택, 프로모션 서비스 연동 시 사용).
   private Long couponId;
+
+  // 결제할 PG(카카오면 주문 생성 시 ready 호출로 결제창 URL을 발급받는다).
+  @NotNull
+  private PgProvider pgProvider;
+
+  // 결제창에 표시할 주문명(카카오 ready item_name 등). 미지정 시 서버 기본값 사용.
+  private String orderName;
 }

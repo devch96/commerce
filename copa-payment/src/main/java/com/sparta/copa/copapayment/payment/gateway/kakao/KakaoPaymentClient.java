@@ -12,6 +12,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 )
 public interface KakaoPaymentClient {
 
+  @PostMapping("/v1/payment/ready")
+  KakaoReadyResponse ready(@RequestBody KakaoReadyRequest request);
+
   @PostMapping("/v1/payment/approve")
   KakaoApproveResponse approvePayment(@RequestBody KakaoApproveRequest request);
+
+  @PostMapping("/v1/payment/cancel")
+  void cancel(@RequestBody KakaoCancelRequest request);
 }

@@ -12,6 +12,8 @@ import java.util.Set;
  */
 public enum OrderStatus {
   ORDER_PLACED,
+  // 주문 생성 후 결제 대기(재고·쿠폰 예약 완료, PG 결제창 진행 중). 결제 확정 시 PAYMENT_COMPLETED.
+  PENDING_PAYMENT,
   PAYMENT_COMPLETED,
   SHIPPING_PENDING,
   IN_TRANSIT,

@@ -46,19 +46,29 @@ public class Payment {
   @Column(name = "user_id", nullable = false)
   private Long userId;
 
-  @Column(nullable = false, precision = 19, scale = 2)
+  // 원(₩) 단위 정수 금액. DB 컬럼은 DECIMAL(19,2)이지만 소수는 쓰지 않는다.
+  @Column(nullable = false)
   private Long amount;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private PaymentStatus status;
 
+  // 결제를 처리한 PG(취소 시 어느 게이트웨이로 라우팅할지 결정).
+  @Enumerated(EnumType.STRING)
+  @Column(name = "pg_provider", length = 20)
+  private PgProvider pgProvider;
+
   // PG 거래 식별자(승인 시 발급).
   @Column(name = "pg_transaction_id", length = 100)
   private String pgTransactionId;
 
+  // 카카오 결제준비(ready)에서 발급되는 거래 ID. 승인·취소 시 사용.
+  @Column(name = "tid", length = 100)
+  private String tid;
+
   // 누적 환불액(부분 환불 대비).
-  @Column(name = "refunded_amount", nullable = false, precision = 19, scale = 2)
+  @Column(name = "refunded_amount", nullable = false)
   private Long refundedAmount;
 
   @CreatedDate
@@ -69,15 +79,17 @@ public class Payment {
   private LocalDateTime updatedAt;
 
   @Builder
-  private Payment(String orderId, Long userId, Long amount, PaymentStatus status) {
+  private Payment(String orderId, Long userId, Long amount, PaymentStatus status,
+      PgProvider pgProvider) {
     this.orderId = orderId;
     this.userId = userId;
     this.amount = amount;
     this.status = status;
+    this.pgProvider = pgProvider;
     this.refundedAmount = 0L;
   }
 
-  public static Payment request(String orderId, Long userId, Long amount) {
+  public static Payment request(String orderId, Long userId, Long amount, PgProvider pgProvider) {
     if (amount == null || amount <= 0) {
       throw new BusinessException(ErrorCode.INVALID_AMOUNT);
     }
@@ -85,8 +97,14 @@ public class Payment {
         .orderId(orderId)
         .userId(userId)
         .amount(amount)
+        .pgProvider(pgProvider)
         .status(PaymentStatus.REQUESTED)
         .build();
+  }
+
+  // 카카오 ready 응답의 tid 저장.
+  public void assignTid(String tid) {
+    this.tid = tid;
   }
 
   public void approve(String pgTransactionId) {

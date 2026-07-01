@@ -88,7 +88,7 @@ public class Order {
         .totalAmount(totalAmount)
         .discountAmount(discountAmount == null ? BigDecimal.ZERO : discountAmount)
         .couponId(couponId)
-        .status(OrderStatus.ORDER_PLACED)
+        .status(OrderStatus.PENDING_PAYMENT)
         .build();
   }
 
@@ -101,9 +101,9 @@ public class Order {
     return this.userId != null && this.userId.equals(userId);
   }
 
-  // 쿠폰 선점 후 확정된 할인액 반영(결제 전, ORDER_PLACED에서만).
+  // 쿠폰 선점 후 확정된 할인액 반영(결제 전, PENDING_PAYMENT에서만).
   public void applyCouponDiscount(BigDecimal discount) {
-    if (status != OrderStatus.ORDER_PLACED) {
+    if (status != OrderStatus.PENDING_PAYMENT) {
       throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
     }
     BigDecimal resolved = discount == null ? BigDecimal.ZERO : discount;
@@ -116,7 +116,7 @@ public class Order {
 
   // 결제 성공 확정.
   public void markPaymentCompleted() {
-    if (status != OrderStatus.ORDER_PLACED) {
+    if (status != OrderStatus.PENDING_PAYMENT) {
       throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS);
     }
     this.status = OrderStatus.PAYMENT_COMPLETED;

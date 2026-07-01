@@ -8,18 +8,16 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-// 카카오는 snake_case 본문을 받으므로 필드명을 자동 변환한다(partnerOrderId → partner_order_id, pgToken → pg_token).
+// 카카오 결제취소(/v1/payment/cancel) 요청. tid로 승인 건을 지정해 취소한다.
 @Getter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class KakaoApproveRequest{
+public class KakaoCancelRequest {
+
   private String cid;
   private String tid;
-  private String partnerOrderId;
-  private String partnerUserId;
-  private String pgToken;
-  private Long totalAmount;
-
+  private Long cancelAmount;
+  private Long cancelTaxFreeAmount;
 }

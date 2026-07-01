@@ -4,9 +4,9 @@ import feign.RequestInterceptor;
 import java.util.Base64;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
 
+// Feign 전용 설정 클래스. @Configuration을 붙이면 전역 빈으로 등록돼 모든 Feign 클라이언트에 적용되므로 붙이지 않는다.
 public class TossFeignConfig {
 
   @Value("${toss.secret-key}")
