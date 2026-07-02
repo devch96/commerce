@@ -1,0 +1,17 @@
+# 각 서비스의 /actuator/prometheus 를 스크래핑한다. 대상은 compose 네트워크의 서비스명:포트.
+global:
+  scrape_interval: 10s
+  scrape_timeout: 5s
+
+scrape_configs:
+  - job_name: copa-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - copa-gateway:8000
+          - copa-user:8081
+          - copa-product:8082
+          - copa-inventory:8083
+          - copa-payment:8084
+          - copa-order:8085
+          - copa-coupon:8086

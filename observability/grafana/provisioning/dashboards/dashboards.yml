@@ -1,0 +1,14 @@
+# 파일 기반 대시보드 프로비저닝. json 하위 폴더의 *.json 대시보드를 'Copa' 폴더로 자동 로드한다.
+apiVersion: 1
+
+providers:
+  - name: copa
+    orgId: 1
+    folder: Copa
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false

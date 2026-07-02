@@ -169,7 +169,10 @@ services:
       timeout: 5s
       retries: 5
 
-  # Kafka 브로커(KRaft 모드, 단일 노드). 서비스는 호스트에서 실행되므로 advertised listener를 localhost:9092로 둔다.
+  # Kafka 브로커(KRaft 모드, 단일 노드). 리스너를 둘로 나눈다:
+  #  - EXTERNAL(localhost:9092): 호스트에서 직접 실행하는 앱/툴 접근용(기존 동작 유지, 9092 매핑).
+  #  - INTERNAL(copa-kafka:29092): compose 네트워크 안의 컨테이너 접근용(advertised가 컨테이너 호스트명).
+  # 컨테이너로 실행하는 copa-product·copa-inventory는 KAFKA_BOOTSTRAP_SERVERS=copa-kafka:29092를 쓴다.
   copa-kafka:
     image: apache/kafka:3.8.1
     container_name: copa-kafka
@@ -178,12 +181,12 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://copa-kafka:29092,EXTERNAL://localhost:9092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -198,7 +201,270 @@ services:
       timeout: 5s
       retries: 10
 
+  # ===================== 관측성(Observability) 인프라 =====================
+  # ELK(로그) + Zipkin(트레이스) + Prometheus/Grafana(메트릭).
+  # 앱은 로그를 logstash:5000(TCP JSON), 트레이스를 zipkin:9411로 보낸다.
+
+  copa-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: copa-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      TZ: Asia/Seoul
+    ports:
+      - "9200:9200"
+    volumes:
+      - copa-es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+
+  copa-logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.0
+    container_name: copa-logstash
+    environment:
+      LS_JAVA_OPTS: "-Xms256m -Xmx256m"
+      XPACK_MONITORING_ENABLED: "false"
+      TZ: Asia/Seoul
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./observability/logstash/pipeline:/usr/share/logstash/pipeline:ro
+    depends_on:
+      copa-elasticsearch:
+        condition: service_healthy
+
+  copa-kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.0
+    container_name: copa-kibana
+    environment:
+      ELASTICSEARCH_HOSTS: http://copa-elasticsearch:9200
+      TZ: Asia/Seoul
+    ports:
+      - "5601:5601"
+    depends_on:
+      copa-elasticsearch:
+        condition: service_healthy
+
+  copa-zipkin:
+    image: openzipkin/zipkin:3
+    container_name: copa-zipkin
+    ports:
+      - "9411:9411"
+    environment:
+      TZ: Asia/Seoul
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9411/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  copa-prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: copa-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - copa-prometheus-data:/prometheus
+
+  copa-grafana:
+    image: grafana/grafana:11.2.0
+    container_name: copa-grafana
+    # 프론트(localhost:3000)와 충돌하지 않도록 호스트 3001로 매핑한다.
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      TZ: Asia/Seoul
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - copa-grafana-data:/var/lib/grafana
+    depends_on:
+      - copa-prometheus
+      - copa-zipkin
+
+  # ===================== 애플리케이션 서비스 =====================
+  # 각 서비스는 자기 디렉토리의 멀티스테이지 Dockerfile로 빌드한다.
+  # 컨테이너 간 통신은 compose 네트워크의 서비스명으로 하며, DB/Redis는 내부 포트(3306/6379)로 접근한다.
+  # JWT_SECRET은 게이트웨이와 copa-user가 동일 값을 공유해야 서명 검증이 된다.
+
+  copa-user:
+    build:
+      context: ./copa-user
+    container_name: copa-user
+    ports:
+      - "8081:8081"
+    environment:
+      DB_URL: "jdbc:mysql://copa-auth-mysql:3306/copa_auth?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
+      DB_USERNAME: copa
+      DB_PASSWORD: copa
+      ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
+      LOGSTASH_HOST: copa-logstash
+      LOGSTASH_PORT: 5000
+      REDIS_HOST: copa-auth-redis
+      REDIS_PORT: 6379
+      JWT_SECRET: local-dev-secret-please-change-this-to-a-shared-256-bit-key
+      TZ: Asia/Seoul
+    depends_on:
+      copa-auth-mysql:
+        condition: service_healthy
+      copa-auth-redis:
+        condition: service_healthy
+
+  copa-product:
+    build:
+      context: ./copa-product
+    container_name: copa-product
+    ports:
+      - "8082:8082"
+    environment:
+      DB_URL: "jdbc:mysql://copa-product-mysql:3306/copa_product?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
+      DB_USERNAME: copa
+      DB_PASSWORD: copa
+      ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
+      LOGSTASH_HOST: copa-logstash
+      LOGSTASH_PORT: 5000
+      REDIS_HOST: copa-product-redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: copa-kafka:29092
+      TZ: Asia/Seoul
+    depends_on:
+      copa-product-mysql:
+        condition: service_healthy
+      copa-product-redis:
+        condition: service_healthy
+      copa-kafka:
+        condition: service_healthy
+
+  copa-inventory:
+    build:
+      context: ./copa-inventory
+    container_name: copa-inventory
+    ports:
+      - "8083:8083"
+    environment:
+      DB_URL: "jdbc:mysql://copa-inventory-mysql:3306/copa_inventory?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
+      DB_USERNAME: copa
+      DB_PASSWORD: copa
+      ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
+      LOGSTASH_HOST: copa-logstash
+      LOGSTASH_PORT: 5000
+      KAFKA_BOOTSTRAP_SERVERS: copa-kafka:29092
+      TZ: Asia/Seoul
+    depends_on:
+      copa-inventory-mysql:
+        condition: service_healthy
+      copa-kafka:
+        condition: service_healthy
+
+  copa-payment:
+    build:
+      context: ./copa-payment
+    container_name: copa-payment
+    ports:
+      - "8084:8084"
+    environment:
+      DB_URL: "jdbc:mysql://copa-payment-mysql:3306/copa_payment?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
+      DB_USERNAME: copa
+      DB_PASSWORD: copa
+      ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
+      LOGSTASH_HOST: copa-logstash
+      LOGSTASH_PORT: 5000
+      # 실 PG 시크릿은 배포 환경에서 주입한다(미설정 시 앱 기본 더미값 사용).
+      TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-test_sk_dummy}
+      KAKAO_SECRET_KEY: ${KAKAO_SECRET_KEY:-DEV_KAKAO_DUMMY}
+      TZ: Asia/Seoul
+    depends_on:
+      copa-payment-mysql:
+        condition: service_healthy
+
+  copa-order:
+    build:
+      context: ./copa-order
+    container_name: copa-order
+    ports:
+      - "8085:8085"
+    environment:
+      DB_URL: "jdbc:mysql://copa-order-mysql:3306/copa_order?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
+      DB_USERNAME: copa
+      DB_PASSWORD: copa
+      ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
+      LOGSTASH_HOST: copa-logstash
+      LOGSTASH_PORT: 5000
+      PRODUCT_URL: http://copa-product:8082
+      INVENTORY_URL: http://copa-inventory:8083
+      PAYMENT_URL: http://copa-payment:8084
+      COUPON_URL: http://copa-coupon:8086
+      TZ: Asia/Seoul
+    depends_on:
+      copa-order-mysql:
+        condition: service_healthy
+      copa-product:
+        condition: service_started
+      copa-inventory:
+        condition: service_started
+      copa-payment:
+        condition: service_started
+      copa-coupon:
+        condition: service_started
+
+  copa-coupon:
+    build:
+      context: ./copa-coupon
+    container_name: copa-coupon
+    ports:
+      - "8086:8086"
+    environment:
+      DB_URL: "jdbc:mysql://copa-coupon-mysql:3306/copa_coupon?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
+      DB_USERNAME: copa
+      DB_PASSWORD: copa
+      ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
+      LOGSTASH_HOST: copa-logstash
+      LOGSTASH_PORT: 5000
+      TZ: Asia/Seoul
+    depends_on:
+      copa-coupon-mysql:
+        condition: service_healthy
+
+  copa-gateway:
+    build:
+      context: ./copa-gateway
+    container_name: copa-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
+      LOGSTASH_HOST: copa-logstash
+      LOGSTASH_PORT: 5000
+      AUTH_SERVICE_URI: http://copa-user:8081
+      PRODUCT_SERVICE_URI: http://copa-product:8082
+      ORDER_SERVICE_URI: http://copa-order:8085
+      PAYMENT_SERVICE_URI: http://copa-payment:8084
+      COUPON_SERVICE_URI: http://copa-coupon:8086
+      JWT_SECRET: local-dev-secret-please-change-this-to-a-shared-256-bit-key
+      TZ: Asia/Seoul
+    depends_on:
+      copa-user:
+        condition: service_started
+      copa-product:
+        condition: service_started
+      copa-order:
+        condition: service_started
+      copa-payment:
+        condition: service_started
+      copa-coupon:
+        condition: service_started
+
 volumes:
+  copa-es-data:
+  copa-prometheus-data:
+  copa-grafana-data:
   copa-auth-mysql-data:
   copa-auth-redis-data:
   copa-product-mysql-data:

@@ -42,3 +42,28 @@ copa:
     relay:
       enabled: true
       poll-interval-ms: 2000
+
+# ── 관측성(Observability): actuator·메트릭·트레이싱 ──────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # HTTP 지연 히스토그램 버킷 발행(Grafana p95/p99 계산용).
+      percentiles-histogram:
+        http.server.requests: true
+        http.client.requests: true
+  tracing:
+    sampling:
+      # 개발 단계는 전량 샘플링. 운영에서는 낮춰야 한다.
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
