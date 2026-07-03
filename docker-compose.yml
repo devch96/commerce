@@ -333,6 +333,8 @@ services:
       REDIS_HOST: copa-product-redis
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: copa-kafka:29092
+      # 상품 전문 검색·집계용 Elasticsearch(ELK 로그 클러스터 재사용).
+      ELASTICSEARCH_URIS: http://copa-elasticsearch:9200
       TZ: Asia/Seoul
     depends_on:
       copa-product-mysql:
@@ -340,6 +342,8 @@ services:
       copa-product-redis:
         condition: service_healthy
       copa-kafka:
+        condition: service_healthy
+      copa-elasticsearch:
         condition: service_healthy
 
   copa-inventory:

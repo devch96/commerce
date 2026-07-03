@@ -15,9 +15,17 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+    # 테스트에는 Elasticsearch가 없다. ES 리포지토리 스캔을 꺼서 시작 시 연결 시도를 막는다
+    # (SimpleElasticsearchRepository 생성자가 클러스터에 연결하므로 컨텍스트 로드가 실패한다).
+    elasticsearch:
+      repositories:
+        enabled: false
 
-# 테스트는 브로커가 없으므로 outbox 릴레이를 끈다(스케줄 발행 비활성).
+# 테스트는 브로커가 없으므로 outbox 릴레이와 검색 색인기(Kafka consumer)를 끈다.
 copa:
   outbox:
     relay:
+      enabled: false
+  search:
+    indexer:
       enabled: false

@@ -94,6 +94,12 @@
   옵션별/조합별 할인(`optionDiscounts`)은 prefix=옵션별·full path=조합별이며 **최장 일치 우선**. 쿠폰은 프로모션 서비스 소관.
   상품 생성 시 **Transactional Outbox**(`outbox_events`)에 `PRODUCT_CREATED` 이벤트를 같은 트랜잭션으로 적재하고, 릴레이 스케줄러(`OutboxRelay`)가
   Kafka 토픽 `product-events`로 발행한다(재고 시드용).
+  - **상품 검색**: 두 경로를 제공한다. **QueryDSL 동적 검색**(`GET /products/search`)은 MySQL 위에서 keyword(상품명·설명)·가격범위·카테고리(하위 트리)·정렬(price·name·createdAt)을
+    `BooleanExpression` 술어로 선택 조합한다(`ProductQueryRepository`). **Elasticsearch 전문 검색**(`GET /products/search/es`, 집계는 `/es/aggregations`)은
+    bool 쿼리(multi_match+fuzziness relevance, status·category·price filter)와 집계(가격 avg/min/max·카테고리 terms)를 `ElasticsearchOperations`로 수행한다(`ProductEsSearchService`).
+    ES 색인은 **Kafka 이벤트 구독**으로 채운다: 상품 생성/수정 시 outbox에 `PRODUCT_UPSERTED`, soft delete 시 `PRODUCT_DELETED`를 토픽 `product-search-events`로 발행 →
+    같은 서비스의 색인기(`ProductSearchIndexer`, `@KafkaListener`)가 ES `products` 인덱스에 멱등 upsert/delete. 인덱스 매핑은 시작 시 명시 생성(`ProductSearchIndexInitializer`).
+    ES 클러스터는 ELK 로그용(`copa-elasticsearch:9200`)을 재사용하며, 검색 색인기·초기화기는 `copa.search.indexer.enabled`로 게이팅(테스트 비활성).
 - **`copa-inventory`**: 옵션(`optionKey`)별 재고의 **권위 원천**. "결제 전 예약(reserve) → 결제 후 확정(confirm)/실패 시 해제(release)" 모델로
   오버셀링을 막는다. 내부 API(`/internal/inventory/**`)만 노출(주문 Saga가 호출). 예약 핫패스는 **비관적 락**으로 직렬화(+`@Version` 낙관적 락),
   reserve/confirm/release는 모두 **멱등**, 미결제 예약은 **TTL 스케줄러**가 자동 해제.
@@ -136,7 +142,9 @@ docker compose up -d
 - `copa-order-mysql`: 3310→3306, db=`copa_order`, user=`copa`/`copa` (root=`root`)
 - `copa-coupon-mysql`: 3311→3306, db=`copa_coupon`, user=`copa`/`copa` (root=`root`)
 - `copa-kafka`: 9092 (KRaft 단일 노드, advertised `localhost:9092`). 첫 이벤트 흐름은 상품 생성 → 재고 시드(토픽 `product-events`).
+  상품 변경 → 검색 색인 흐름은 토픽 `product-search-events`(copa-product outbox → copa-product 색인기 → Elasticsearch).
   주문 Saga·쿠폰 선착순의 Kafka 전환은 후속 단계.
+- `copa-elasticsearch`: 9200 (single-node). ELK 로그 저장과 **상품 검색 색인(`products`)** 을 겸한다.
 
 > 참고: `.clauderules`는 PostgreSQL을 명시하지만 설계 문서와 실제 인프라(`docker-compose.yml`)는
 > **MySQL 8.0** 기준이다. 이 프로젝트는 MySQL로 진행하며, Flyway도 `flyway-mysql`을 쓴다.

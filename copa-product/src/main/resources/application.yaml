@@ -26,6 +26,9 @@ spring:
       # 상품 상세 조회 Look-Aside 캐시 전용. copa-auth-redis(6379)와 분리.
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+  # 상품 전문 검색·집계용 Elasticsearch(ELK 로그 클러스터와 동일 인스턴스 재사용).
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -35,6 +38,12 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      # 검색 색인기 소비자. 새 그룹은 처음 시작 시 초기 오프셋부터 읽어 누락을 줄인다.
+      group-id: ${SEARCH_INDEXER_GROUP_ID:copa-product-search-indexer}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 # outbox 릴레이: 미발행 이벤트를 폴링해 Kafka로 발행한다.
 copa:
@@ -42,6 +51,10 @@ copa:
     relay:
       enabled: true
       poll-interval-ms: 2000
+  # 검색 색인기(@KafkaListener): product-search-events 구독 → Elasticsearch upsert/delete.
+  search:
+    indexer:
+      enabled: true
 
 # ── 관측성(Observability): actuator·메트릭·트레이싱 ──────────────
 management:

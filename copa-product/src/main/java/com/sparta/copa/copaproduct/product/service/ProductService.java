@@ -9,10 +9,12 @@ import com.sparta.copa.copaproduct.outbox.OutboxRecorder;
 import com.sparta.copa.copaproduct.product.domain.Product;
 import com.sparta.copa.copaproduct.product.domain.ProductCategory;
 import com.sparta.copa.copaproduct.product.dto.request.ProductCreateRequest;
+import com.sparta.copa.copaproduct.product.dto.request.ProductSearchCondition;
 import com.sparta.copa.copaproduct.product.dto.request.ProductUpdateRequest;
 import com.sparta.copa.copaproduct.product.dto.response.OptionPriceResponse;
 import com.sparta.copa.copaproduct.product.dto.response.ProductResponse;
 import com.sparta.copa.copaproduct.product.repository.ProductCategoryRepository;
+import com.sparta.copa.copaproduct.product.repository.ProductQueryRepository;
 import com.sparta.copa.copaproduct.product.repository.ProductRepository;
 import java.time.Year;
 import java.util.ArrayList;
@@ -39,6 +41,7 @@ public class ProductService {
 
   private final ProductRepository productRepository;
   private final ProductCategoryRepository productCategoryRepository;
+  private final ProductQueryRepository productQueryRepository;
   private final CategoryService categoryService;
   private final ProductCacheService productCacheService;
   private final OutboxRecorder outboxRecorder;
@@ -60,6 +63,8 @@ public class ProductService {
     linkCategories(product, categories);
     // 같은 트랜잭션에 outbox 이벤트를 적재 → 릴레이가 Kafka로 발행 → 재고 서비스가 옵션별 재고를 시드.
     outboxRecorder.recordProductCreated(product);
+    // 검색 색인 이벤트도 같은 트랜잭션에 적재 → Kafka product-search-events → 검색 색인기가 ES upsert.
+    outboxRecorder.recordProductUpserted(product, request.getCategoryIds());
     return ProductResponse.from(product, request.getCategoryIds());
   }
 
@@ -70,10 +75,30 @@ public class ProductService {
             categoryService.collectSubtreeIds(categoryId), PUBLICLY_VISIBLE, pageable)
         : productRepository.findByDeletedFalseAndStatusIn(PUBLICLY_VISIBLE, pageable);
 
+    return withCategoryIds(products);
+  }
+
+  /**
+   * QueryDSL 동적 검색: keyword·가격범위·카테고리(하위 트리)·정렬을 선택적으로 조합해 조회한다.
+   * RDBMS(MySQL) 정형 검색이며, 전문 검색·집계는 Elasticsearch 경로를 쓴다.
+   */
+  @Transactional(readOnly = true)
+  public Page<ProductResponse> searchProducts(ProductSearchCondition condition, Pageable pageable) {
+    // 상위 카테고리로 검색해도 하위 상품이 잡히도록 하위 트리를 펼친다.
+    List<Long> categoryIds = condition.getCategoryId() != null
+        ? categoryService.collectSubtreeIds(condition.getCategoryId())
+        : null;
+    Page<Product> products = productQueryRepository.search(
+        condition, categoryIds, PUBLICLY_VISIBLE, pageable);
+    return withCategoryIds(products);
+  }
+
+  // 상품 페이지에 카테고리 id를 배치 조회로 채워 응답으로 변환(N+1 회피).
+  private Page<ProductResponse> withCategoryIds(Page<Product> products) {
     Map<Long, List<Long>> categoryIdsByProduct = categoryIdsByProduct(
         products.getContent().stream().map(Product::getId).toList());
-    return products.map(
-        product -> ProductResponse.from(product, categoryIdsByProduct.getOrDefault(product.getId(), List.of())));
+    return products.map(product -> ProductResponse.from(
+        product, categoryIdsByProduct.getOrDefault(product.getId(), List.of())));
   }
 
   // 공개 상세 조회: 비공개 상태(HIDDEN/DISCONTINUED)는 목록과 동일하게 404로 가린다(내부 API는 getProduct로 전체 접근).
@@ -127,6 +152,8 @@ public class ProductService {
     // 카테고리 링크는 통째로 교체한다.
     productCategoryRepository.deleteByProductId(productId);
     linkCategories(product, categories);
+    // 이름·가격·상태·카테고리 변경을 검색 색인에 반영(upsert). 상태가 SALE로 바뀌면 이때 노출된다.
+    outboxRecorder.recordProductUpserted(product, request.getCategoryIds());
     evictCacheAfterCommit(productId);
     return ProductResponse.from(product, request.getCategoryIds());
   }
@@ -136,6 +163,8 @@ public class ProductService {
     Product product = getById(productId);
     checkModifiable(product, userId, isAdmin);
     product.softDelete();
+    // soft delete된 상품은 검색 색인에서 제거한다.
+    outboxRecorder.recordProductDeleted(productId);
     evictCacheAfterCommit(productId);
   }
 

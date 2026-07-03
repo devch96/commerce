@@ -24,10 +24,19 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // Elasticsearch: 상품 전문 검색(통합 검색·집계). 색인은 Kafka product-search-events 구독으로 채운다.
+    implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+
+    // QueryDSL: 목록/검색의 RDBMS 동적 쿼리(keyword·가격범위·카테고리·정렬 동적 조합).
+    implementation 'com.querydsl:querydsl-jpa:5.1.0:jakarta'
+    annotationProcessor 'com.querydsl:querydsl-apt:5.1.0:jakarta'
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
+
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'
 
-    // 상품 생성 이벤트를 outbox 릴레이가 Kafka로 발행한다.
+    // 상품 생성·검색 색인 이벤트를 outbox 릴레이가 Kafka로 발행한다.
     implementation 'org.springframework.kafka:spring-kafka'
 
     // ── 관측성(Observability) ─────────────────────────────

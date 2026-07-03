@@ -10,10 +10,12 @@ import static org.mockito.Mockito.verify;
 import com.sparta.copa.copaproduct.category.service.CategoryService;
 import com.sparta.copa.copaproduct.common.exception.BusinessException;
 import com.sparta.copa.copaproduct.common.exception.ErrorCode;
+import com.sparta.copa.copaproduct.outbox.OutboxRecorder;
 import com.sparta.copa.copaproduct.product.domain.Product;
 import com.sparta.copa.copaproduct.product.dto.request.ProductUpdateRequest;
 import com.sparta.copa.copaproduct.product.dto.response.ProductResponse;
 import com.sparta.copa.copaproduct.product.repository.ProductCategoryRepository;
+import com.sparta.copa.copaproduct.product.repository.ProductQueryRepository;
 import com.sparta.copa.copaproduct.product.repository.ProductRepository;
 import java.math.BigDecimal;
 import java.util.List;
@@ -34,9 +36,13 @@ class ProductServiceTest {
   @Mock
   private ProductCategoryRepository productCategoryRepository;
   @Mock
+  private ProductQueryRepository productQueryRepository;
+  @Mock
   private CategoryService categoryService;
   @Mock
   private ProductCacheService productCacheService;
+  @Mock
+  private OutboxRecorder outboxRecorder;
 
   @InjectMocks
   private ProductService productService;
