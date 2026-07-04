@@ -1,5 +1,6 @@
 package com.sparta.copa.copacoupon.coupon.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
@@ -17,8 +18,8 @@ public class CouponReserveRequest {
   @NotNull
   private Long userId;
 
-  @NotNull
-  private Long orderId;
+  @NotBlank
+  private String orderId;
 
   @NotNull
   @PositiveOrZero

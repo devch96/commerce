@@ -14,6 +14,9 @@ public enum ErrorCode {
   COUPON_OUT_OF_STOCK(HttpStatus.CONFLICT, "쿠폰이 모두 소진되었습니다."),
   COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "이미 발급받은 쿠폰입니다."),
   COUPON_NOT_ISSUABLE(HttpStatus.BAD_REQUEST, "지금은 발급할 수 없는 쿠폰입니다."),
+  // 선착순(Redis) 발급.
+  COUPON_FCFS_NOT_OPEN(HttpStatus.NOT_FOUND, "선착순 발급이 열려 있지 않은 쿠폰입니다."),
+  COUPON_FCFS_PUBLISH_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "발급 처리에 실패했습니다. 잠시 후 다시 시도해 주세요."),
   // 사용/검증.
   COUPON_EXPIRED(HttpStatus.BAD_REQUEST, "만료된 쿠폰입니다."),
   COUPON_MIN_ORDER_NOT_MET(HttpStatus.BAD_REQUEST, "최소 주문 금액을 충족하지 않습니다."),

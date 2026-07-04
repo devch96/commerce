@@ -38,8 +38,9 @@ public class StockReservation {
   private Long id;
 
   // 멱등 키. 같은 주문의 중복 예약 이벤트를 막는 기준.
-  @Column(name = "order_id", nullable = false)
-  private Long orderId;
+  // 주문 서비스의 외부 주문번호(orderNo). 열거 방지를 위해 PK 대신 문자열 식별자를 쓴다.
+  @Column(name = "order_id", nullable = false, length = 30)
+  private String orderId;
 
   @Column(name = "product_id", nullable = false)
   private Long productId;
@@ -63,7 +64,7 @@ public class StockReservation {
   private LocalDateTime createdAt;
 
   @Builder
-  private StockReservation(Long orderId, Long productId, String optionKey, Integer quantity,
+  private StockReservation(String orderId, Long productId, String optionKey, Integer quantity,
       ReservationStatus status, LocalDateTime expiresAt) {
     this.orderId = orderId;
     this.productId = productId;
@@ -73,7 +74,7 @@ public class StockReservation {
     this.expiresAt = expiresAt;
   }
 
-  public static StockReservation reserve(Long orderId, Long productId, String optionKey,
+  public static StockReservation reserve(String orderId, Long productId, String optionKey,
       int quantity, LocalDateTime expiresAt) {
     return StockReservation.builder()
         .orderId(orderId)

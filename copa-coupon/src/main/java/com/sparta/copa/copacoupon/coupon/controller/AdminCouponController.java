@@ -7,6 +7,8 @@ import com.sparta.copa.copacoupon.coupon.dto.request.CouponCreateRequest;
 import com.sparta.copa.copacoupon.coupon.dto.request.CouponStatusRequest;
 import com.sparta.copa.copacoupon.coupon.dto.response.CouponResponse;
 import com.sparta.copa.copacoupon.coupon.service.CouponService;
+import com.sparta.copa.copacoupon.fcfs.dto.FcfsOpenRequest;
+import com.sparta.copa.copacoupon.fcfs.service.FcfsCouponService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -31,12 +33,22 @@ public class AdminCouponController {
   private static final String ADMIN_ROLE = "ADMIN";
 
   private final CouponService couponService;
+  private final FcfsCouponService fcfsCouponService;
 
   @PostMapping
   public ApiResponse<CouponResponse> create(@RequestHeader(USER_ROLE_HEADER) String role,
       @Valid @RequestBody CouponCreateRequest request) {
     requireAdmin(role);
     return ApiResponse.success(couponService.createCoupon(request));
+  }
+
+  // 선착순 발급 오픈: 재고를 Redis에 시드한다(quantity 생략 시 기본 1000장).
+  @PostMapping("/{couponId}/fcfs/open")
+  public ApiResponse<Long> openFcfs(@RequestHeader(USER_ROLE_HEADER) String role,
+      @PathVariable Long couponId, @Valid @RequestBody(required = false) FcfsOpenRequest request) {
+    requireAdmin(role);
+    Integer quantity = request == null ? null : request.getQuantity();
+    return ApiResponse.success(fcfsCouponService.open(couponId, quantity));
   }
 
   @GetMapping

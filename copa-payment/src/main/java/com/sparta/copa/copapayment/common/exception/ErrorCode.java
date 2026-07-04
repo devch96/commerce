@@ -12,7 +12,9 @@ public enum ErrorCode {
   PAYMENT_DECLINED(HttpStatus.PAYMENT_REQUIRED, "결제가 거절되었습니다."),
   // 이미 취소/실패한 결제에 대한 잘못된 상태 전이.
   INVALID_PAYMENT_STATE(HttpStatus.CONFLICT, "현재 상태에서 처리할 수 없는 결제 요청입니다."),
-  REFUND_EXCEEDS_AMOUNT(HttpStatus.BAD_REQUEST, "환불 금액이 결제 잔액을 초과합니다.");
+  REFUND_EXCEEDS_AMOUNT(HttpStatus.BAD_REQUEST, "환불 금액이 결제 잔액을 초과합니다."),
+  // 본인 결제가 아닌 조회 차단(IDOR 방어).
+  ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 결제에 접근할 권한이 없습니다.");
 
   private final HttpStatus status;
   private final String message;

@@ -169,6 +169,21 @@ services:
       timeout: 5s
       retries: 5
 
+  copa-coupon-redis:
+    image: redis:7.2
+    container_name: copa-coupon-redis
+    # 선착순 쿠폰 발급의 권위 데이터(재고·1인1매 집합). auth(6379)·product(6380)와 포트 충돌을 피해 6381로 매핑.
+    ports:
+      - "6381:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - copa-coupon-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Kafka 브로커(KRaft 모드, 단일 노드). 리스너를 둘로 나눈다:
   #  - EXTERNAL(localhost:9092): 호스트에서 직접 실행하는 앱/툴 접근용(기존 동작 유지, 9092 매핑).
   #  - INTERNAL(copa-kafka:29092): compose 네트워크 안의 컨테이너 접근용(advertised가 컨테이너 호스트명).
@@ -428,12 +443,19 @@ services:
       DB_URL: "jdbc:mysql://copa-coupon-mysql:3306/copa_coupon?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
       DB_USERNAME: copa
       DB_PASSWORD: copa
+      REDIS_HOST: copa-coupon-redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: copa-kafka:29092
       ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
       LOGSTASH_HOST: copa-logstash
       LOGSTASH_PORT: 5000
       TZ: Asia/Seoul
     depends_on:
       copa-coupon-mysql:
+        condition: service_healthy
+      copa-coupon-redis:
+        condition: service_healthy
+      copa-kafka:
         condition: service_healthy
 
   copa-gateway:
@@ -477,3 +499,4 @@ volumes:
   copa-payment-mysql-data:
   copa-order-mysql-data:
   copa-coupon-mysql-data:
+  copa-coupon-redis-data:

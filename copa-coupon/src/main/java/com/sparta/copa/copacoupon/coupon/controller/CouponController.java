@@ -3,6 +3,8 @@ package com.sparta.copa.copacoupon.coupon.controller;
 import com.sparta.copa.copacoupon.common.response.ApiResponse;
 import com.sparta.copa.copacoupon.coupon.dto.response.UserCouponResponse;
 import com.sparta.copa.copacoupon.coupon.service.CouponService;
+import com.sparta.copa.copacoupon.fcfs.dto.FcfsIssueResponse;
+import com.sparta.copa.copacoupon.fcfs.service.FcfsCouponService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,11 +25,19 @@ public class CouponController {
   private static final String USER_ID_HEADER = "X-User-Id";
 
   private final CouponService couponService;
+  private final FcfsCouponService fcfsCouponService;
 
   @PostMapping("/{couponId}/issue")
   public ApiResponse<UserCouponResponse> issue(@RequestHeader(USER_ID_HEADER) Long userId,
       @PathVariable Long couponId) {
     return ApiResponse.success(couponService.issue(couponId, userId));
+  }
+
+  // 선착순 발급: Redis 원자 발급으로 재고 통제, DB 반영은 Kafka로 비동기 처리(설계 08-B).
+  @PostMapping("/{couponId}/issue-fcfs")
+  public ApiResponse<FcfsIssueResponse> issueFcfs(@RequestHeader(USER_ID_HEADER) Long userId,
+      @PathVariable Long couponId) {
+    return ApiResponse.success(fcfsCouponService.issue(couponId, userId));
   }
 
   @GetMapping("/me")

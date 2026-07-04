@@ -54,7 +54,7 @@ class InventoryConcurrencyTest {
 
     Future<?>[] futures = new Future<?>[threads];
     for (int i = 0; i < threads; i++) {
-      long orderId = i + 1L;
+      String orderId = "ORD-" + (i + 1);
       futures[i] = pool.submit(() -> {
         try {
           barrier.await();

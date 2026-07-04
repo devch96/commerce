@@ -13,7 +13,7 @@ import lombok.Getter;
 public class CouponReserveResponse {
 
   private final Long userCouponId;
-  private final Long orderId;
+  private final String orderId;
   private final BigDecimal discountAmount;
 
   public static CouponReserveResponse from(UserCoupon userCoupon) {

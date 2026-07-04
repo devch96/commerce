@@ -30,5 +30,5 @@ public interface PaymentFeignClient {
       @RequestBody Map<String, Object> body);
 
   @PostMapping("/internal/payments/{orderId}/cancel")
-  void cancel(@PathVariable("orderId") Long orderId);
+  void cancel(@PathVariable("orderId") String orderNo);
 }

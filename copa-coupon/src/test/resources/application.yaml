@@ -11,3 +11,10 @@ spring:
     hibernate:
       ddl-auto: create-drop
     database-platform: org.hibernate.dialect.H2Dialect
+
+# 테스트는 Kafka 브로커가 없으므로 선착순 발급 컨슈머(@KafkaListener)를 비활성화한다.
+copa:
+  coupon:
+    fcfs:
+      consumer:
+        enabled: false

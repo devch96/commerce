@@ -7,9 +7,9 @@ import com.sparta.copa.copaorder.order.domain.Order;
 import com.sparta.copa.copaorder.order.dto.response.OrderResponse;
 import com.sparta.copa.copaorder.order.repository.OrderItemRepository;
 import com.sparta.copa.copaorder.order.repository.OrderRepository;
-import java.util.ArrayList;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,10 +24,10 @@ public class OrderQueryService {
   private final OrderRepository orderRepository;
   private final OrderItemRepository orderItemRepository;
 
-  // 소유자 검증 포함(사용자 대면 조회).
+  // 소유자 검증 포함(사용자 대면 조회). 외부 식별자(orderNo)로 접근한다.
   @Transactional(readOnly = true)
-  public OrderResponse getOwnedOrder(Long orderId, Long userId) {
-    Order order = getOrder(orderId);
+  public OrderResponse getOwnedOrder(String orderNo, Long userId) {
+    Order order = getOrder(orderNo);
     if (!order.isOwnedBy(userId)) {
       throw new BusinessException(ErrorCode.ACCESS_DENIED);
     }
@@ -36,28 +36,25 @@ public class OrderQueryService {
 
   // 소유자 검증 없음(어드민/내부 응답 조립).
   @Transactional(readOnly = true)
-  public OrderResponse getOrderResponse(Long orderId) {
-    return toResponse(getOrder(orderId));
+  public OrderResponse getOrderResponse(String orderNo) {
+    return toResponse(getOrder(orderNo));
   }
 
+  // 내 주문 목록(페이징). 정렬 기본값은 컨트롤러 @PageableDefault(createdAt desc)가 정한다.
   @Transactional(readOnly = true)
-  public List<OrderResponse> getMyOrders(Long userId, OrderStatus status) {
-    List<Order> orders = (status == null)
-        ? orderRepository.findByUserIdOrderByCreatedAtDesc(userId)
-        : orderRepository.findByUserIdAndStatusOrderByCreatedAtDesc(userId, status);
-    List<OrderResponse> responses = new ArrayList<>();
-    for (Order order : orders) {
-      responses.add(toResponse(order));
-    }
-    return responses;
+  public Page<OrderResponse> getMyOrders(Long userId, OrderStatus status, Pageable pageable) {
+    Page<Order> orders = (status == null)
+        ? orderRepository.findByUserId(userId, pageable)
+        : orderRepository.findByUserIdAndStatus(userId, status, pageable);
+    return orders.map(this::toResponse);
   }
 
   private OrderResponse toResponse(Order order) {
     return OrderResponse.from(order, orderItemRepository.findByOrder_Id(order.getId()));
   }
 
-  private Order getOrder(Long orderId) {
-    return orderRepository.findById(orderId)
+  private Order getOrder(String orderNo) {
+    return orderRepository.findByOrderNo(orderNo)
         .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
   }
 }

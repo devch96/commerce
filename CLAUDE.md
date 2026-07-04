@@ -115,6 +115,9 @@
   DB 변경은 `OrderCommandService`(짧은 트랜잭션)에 위임(자기호출 프록시 우회 방지). 사용자 취소는 결제 환불 + 재고 `restore`(확정 재고 복원).
   금액은 `BigDecimal`. 쿠폰 적용 시 옵션 할인가(주문 총액) 위에 쿠폰 할인을 스택. DB는 **MySQL**(`copa-order-mysql`).
   쿠폰도 재고와 동일하게 **reserve→use(confirm)→release/restore**로 Saga에 연동(결제 8084·쿠폰 8086 추가).
+  **주문 외부 식별자는 `orderNo`(String, `ORD-yyyyMMdd-XXXXXX`)** — 순차 PK 열거 방지. 클라이언트 API 경로(`/orders/{orderNo}/**`)와
+  서비스 간 Saga 참조(재고 `stock_reservation.order_id`·쿠폰 `user_coupons.*_order_id`·결제 `payments.order_id`, 모두 VARCHAR(30))는
+  orderNo를 쓰고, Long PK는 주문 서비스 내부 FK 전용. Phase 1에서 `pgProvider`를 주문에 저장해 Phase 2 confirm에서 대조(교차 PG 차단).
 - **`copa-coupon`**: 쿠폰·프로모션 서비스(설계 08). `Coupon`(정의/템플릿) + `UserCoupon`(발급 인스턴스, `(coupon_id,user_id)` 유니크=1인 1매).
   할인 `type`(FIXED_AMOUNT/PERCENTAGE, 정률은 `maxDiscount` 상한), 유효기간 3종, `minOrderAmount`, 한정 수량(`total/issuedQuantity`), `targetType`(현재 ALL).
   발급은 **비관적 락 + 유니크**로 초과/중복 발급 0. 내부 API(`/internal/coupons`) **reserve(검증+할인계산)·confirm(use)·release·restore**는 `orderId` 멱등(주문 Saga가 호출).

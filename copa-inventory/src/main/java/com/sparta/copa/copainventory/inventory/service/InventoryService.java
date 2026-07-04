@@ -111,20 +111,34 @@ public class InventoryService {
     }
   }
 
-  // 확정(결제 성공). 가용 재고는 예약 시 이미 차감되어 추가 차감 없음. 멱등.
-  // 예약 행을 잠가 동시 TTL 해제와 상호 배타로 만든다(먼저 전이한 쪽이 이김).
+  /**
+   * 확정(결제 성공). 가용 재고는 예약 시 이미 차감되어 추가 차감 없음. 멱등(이미 CONFIRMED면 no-op).
+   * 예약 행을 잠가 동시 TTL 해제와 상호 배타로 만든다(먼저 전이한 쪽이 이김).
+   *
+   * <p>살아있는(RESERVED/CONFIRMED) 예약이 하나도 없으면 명시적으로 실패시킨다 — TTL 만료로 이미
+   * 해제(재고 복원)된 뒤 조용히 성공하면 재고 차감 없이 주문이 완료되는 오버셀이 생기기 때문.
+   * 이 실패를 받은 주문 Saga는 완료 처리를 멈추고 복구 경로(ORDER_COMPLETION_FAILED)로 남긴다.
+   */
   @Transactional
-  public void confirm(Long orderId) {
-    for (StockReservation reservation
-        : reservationRepository.findForUpdateByOrderIdAndStatus(orderId, ReservationStatus.RESERVED)) {
-      reservation.confirm();
+  public void confirm(String orderId) {
+    boolean alive = false;
+    for (StockReservation reservation : reservationRepository.findForUpdateByOrderId(orderId)) {
+      if (reservation.getStatus() == ReservationStatus.RESERVED) {
+        reservation.confirm();
+        alive = true;
+      } else if (reservation.getStatus() == ReservationStatus.CONFIRMED) {
+        alive = true; // 이미 확정 → 멱등 no-op
+      }
+    }
+    if (!alive) {
+      throw new BusinessException(ErrorCode.RESERVATION_EXPIRED);
     }
   }
 
   // 해제(결제 실패/타임아웃/TTL 만료). 가용 재고를 복원하고 예약을 RELEASED로 표시. 멱등.
   // 예약 행을 먼저 잠가(상호 배타) confirm·다중 인스턴스 스케줄러와의 경합 및 재고 이중 복원을 막는다.
   @Transactional
-  public void release(Long orderId) {
+  public void release(String orderId) {
     List<StockReservation> reservations = reservationRepository
         .findForUpdateByOrderIdAndStatus(orderId, ReservationStatus.RESERVED)
         .stream().sorted(RESERVATION_LOCK_ORDER).toList();
@@ -139,7 +153,7 @@ public class InventoryService {
 
   // 복원(결제 완료 주문의 사용자 취소). 확정(CONFIRMED)·예약(RESERVED) 모두 가용 재고를 되돌리고 RELEASED로. 멱등.
   @Transactional
-  public void restore(Long orderId) {
+  public void restore(String orderId) {
     List<StockReservation> reservations = reservationRepository.findForUpdateByOrderId(orderId)
         .stream().sorted(RESERVATION_LOCK_ORDER).toList();
     for (StockReservation reservation : reservations) {

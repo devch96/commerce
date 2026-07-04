@@ -26,5 +26,5 @@ public interface UserCouponRepository extends JpaRepository<UserCoupon, Long> {
   // 멱등 보상: 주문 기준으로 선점/사용된 쿠폰 조회(orderId 단위 confirm/release).
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select uc from UserCoupon uc where uc.reservedOrderId = :orderId or uc.usedOrderId = :orderId")
-  Optional<UserCoupon> findByOrderIdForUpdate(@Param("orderId") Long orderId);
+  Optional<UserCoupon> findByOrderIdForUpdate(@Param("orderId") String orderId);
 }

@@ -4,16 +4,21 @@ import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import com.sparta.copa.copaproduct.common.exception.BusinessException;
+import com.sparta.copa.copaproduct.common.exception.ErrorCode;
 import com.sparta.copa.copaproduct.search.document.ProductDocument;
 import com.sparta.copa.copaproduct.search.dto.request.ProductEsSearchCondition;
 import com.sparta.copa.copaproduct.search.dto.response.ProductAggregationResponse;
 import com.sparta.copa.copaproduct.search.dto.response.ProductSearchResult;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
@@ -46,21 +51,27 @@ public class ProductEsSearchService {
   private static final String AGG_MAX_PRICE = "max_price";
   private static final String AGG_BY_CATEGORY = "by_category";
 
+  // ES 정렬 허용 필드(QueryDSL 경로와 동일 정책 — 허용 밖 필드는 무시). name은 text 필드라 정렬 불가.
+  private static final Set<String> SORTABLE_FIELDS = Set.of("price", "createdAt");
+
   private final ElasticsearchOperations elasticsearchOperations;
 
   public Page<ProductSearchResult> search(ProductEsSearchCondition condition, Pageable pageable) {
+    validatePriceRange(condition);
+    Pageable sanitized = whitelistSort(pageable);
     NativeQuery query = NativeQuery.builder()
         .withQuery(buildQuery(condition))
-        .withPageable(pageable)
+        .withPageable(sanitized)
         .build();
     SearchHits<ProductDocument> hits = elasticsearchOperations.search(query, ProductDocument.class);
     List<ProductSearchResult> results = hits.getSearchHits().stream()
         .map(hit -> ProductSearchResult.from(hit.getContent(), hit.getScore()))
         .toList();
-    return new PageImpl<>(results, pageable, hits.getTotalHits());
+    return new PageImpl<>(results, sanitized, hits.getTotalHits());
   }
 
   public ProductAggregationResponse aggregate(ProductEsSearchCondition condition) {
+    validatePriceRange(condition);
     NativeQuery query = NativeQuery.builder()
         .withQuery(buildQuery(condition))
         // 집계만 필요하므로 히트는 받지 않는다(size=0).
@@ -137,5 +148,26 @@ public class ProductEsSearchService {
   // 매칭 문서가 없으면 avg/min/max는 NaN이므로 null로 정규화한다.
   private Double nullIfNaN(double value) {
     return Double.isNaN(value) ? null : value;
+  }
+
+  // 검색 가격 범위 정합성: 음수·역전(min>max)은 400으로 거절한다(QueryDSL 경로와 동일 정책).
+  private void validatePriceRange(ProductEsSearchCondition condition) {
+    boolean negative = (condition.getMinPrice() != null && condition.getMinPrice().signum() < 0)
+        || (condition.getMaxPrice() != null && condition.getMaxPrice().signum() < 0);
+    boolean inverted = condition.getMinPrice() != null && condition.getMaxPrice() != null
+        && condition.getMinPrice().compareTo(condition.getMaxPrice()) > 0;
+    if (negative || inverted) {
+      throw new BusinessException(ErrorCode.INVALID_SEARCH_CONDITION);
+    }
+  }
+
+  // 허용되지 않은 정렬 필드는 제거한다(존재하지 않는 필드 정렬로 인한 ES 500 방지).
+  // 정렬이 모두 걸러지면 기본(relevance 점수순)으로 둔다.
+  private Pageable whitelistSort(Pageable pageable) {
+    List<Sort.Order> allowed = pageable.getSort().stream()
+        .filter(order -> SORTABLE_FIELDS.contains(order.getProperty()))
+        .toList();
+    Sort sort = allowed.isEmpty() ? Sort.unsorted() : Sort.by(allowed);
+    return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
   }
 }

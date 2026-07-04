@@ -1,8 +1,8 @@
 package com.sparta.copa.copainventory.inventory.dto.request;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -17,8 +17,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ReserveRequest {
 
-  @NotNull
-  private Long orderId;
+  @NotBlank
+  private String orderId;
 
   @NotEmpty
   @Valid

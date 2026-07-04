@@ -13,7 +13,7 @@ import lombok.Getter;
 @Builder
 public class OrderResponse {
 
-  private final Long id;
+  private final String orderNo;
   private final Long userId;
   private final OrderStatus status;
   private final BigDecimal totalAmount;
@@ -26,7 +26,7 @@ public class OrderResponse {
 
   public static OrderResponse from(Order order, List<OrderItem> items) {
     return OrderResponse.builder()
-        .id(order.getId())
+        .orderNo(order.getOrderNo())
         .userId(order.getUserId())
         .status(order.getStatus())
         .totalAmount(order.getTotalAmount())

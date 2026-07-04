@@ -59,12 +59,12 @@ public class UserCoupon {
   @Column(name = "expires_at", nullable = false)
   private LocalDateTime expiresAt;
 
-  // 선점/사용된 주문. 멱등 판단 기준(같은 orderId면 재처리하지 않는다).
-  @Column(name = "reserved_order_id")
-  private Long reservedOrderId;
+  // 선점/사용된 주문(주문 서비스의 외부 주문번호 orderNo). 멱등 판단 기준(같은 orderId면 재처리하지 않는다).
+  @Column(name = "reserved_order_id", length = 30)
+  private String reservedOrderId;
 
-  @Column(name = "used_order_id")
-  private Long usedOrderId;
+  @Column(name = "used_order_id", length = 30)
+  private String usedOrderId;
 
   // reserve 시 계산된 할인액(보상 시 null). 멱등 reserve가 동일 값을 반환하도록 보존.
   @Column(name = "discount_amount", precision = 19, scale = 2)
@@ -97,16 +97,16 @@ public class UserCoupon {
     return this.userId != null && this.userId.equals(userId);
   }
 
-  public boolean isReservedFor(Long orderId) {
+  public boolean isReservedFor(String orderId) {
     return status == UserCouponStatus.RESERVED && orderId.equals(reservedOrderId);
   }
 
-  public boolean isUsedFor(Long orderId) {
+  public boolean isUsedFor(String orderId) {
     return status == UserCouponStatus.USED && orderId.equals(usedOrderId);
   }
 
   // 주문에 선점(ISSUED→RESERVED). 만료/상태 검증은 서비스가 선행한다.
-  public void reserve(Long orderId, BigDecimal discountAmount) {
+  public void reserve(String orderId, BigDecimal discountAmount) {
     if (status != UserCouponStatus.ISSUED) {
       throw new BusinessException(ErrorCode.COUPON_NOT_USABLE);
     }
@@ -116,7 +116,7 @@ public class UserCoupon {
   }
 
   // 사용 확정(RESERVED→USED). 결제 성공 시.
-  public void use(Long orderId) {
+  public void use(String orderId) {
     if (!isReservedFor(orderId)) {
       throw new BusinessException(ErrorCode.COUPON_NOT_USABLE);
     }

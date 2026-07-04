@@ -22,6 +22,36 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  # 선착순 발급의 권위 데이터(재고·1인1매 집합). auth(6379)·product(6380)와 분리해 6381로 매핑.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6381}
+  # 선착순 발급 성공분을 coupon-issued 토픽으로 발행 → 컨슈머가 DB 반영(최종 일관성).
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # 유실 0을 위해 모든 ISR 확인 + 멱등 프로듀서.
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: ${COUPON_ISSUED_GROUP_ID:copa-coupon-issued}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+# 선착순 쿠폰(Redis 원자 발급 + Kafka 비동기 DB 반영).
+copa:
+  coupon:
+    fcfs:
+      # 관리자가 오픈 시 수량을 생략하면 시드할 임시 발급 상한.
+      default-quantity: 1000
+      consumer:
+        enabled: true
+        group-id: copa-coupon-issued
 
 # ── 관측성(Observability): actuator·메트릭·트레이싱 ──────────────
 management:

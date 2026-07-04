@@ -1,6 +1,7 @@
 package com.sparta.copa.copaorder.order.domain;
 
 import com.sparta.copa.copaorder.common.enums.OrderStatus;
+import com.sparta.copa.copaorder.common.enums.PgProvider;
 import com.sparta.copa.copaorder.common.exception.BusinessException;
 import com.sparta.copa.copaorder.common.exception.ErrorCode;
 import jakarta.persistence.Column;
@@ -41,6 +42,11 @@ public class Order {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  // 외부 노출용 주문번호(ORD-yyyyMMdd-XXXXXX). 순차 PK 노출로 인한 열거를 막고,
+  // 클라이언트 API·서비스 간 Saga 참조(재고·쿠폰·결제)는 모두 이 값을 쓴다. PK는 내부 FK 전용.
+  @Column(name = "order_no", nullable = false, unique = true, length = 30)
+  private String orderNo;
+
   @Column(name = "user_id", nullable = false)
   private Long userId;
 
@@ -59,6 +65,12 @@ public class Order {
   @Column(name = "coupon_id")
   private Long couponId;
 
+  // 주문 생성(Phase 1) 시 선택한 PG. Phase 2 confirm은 이 값과 대조해 교차 PG 호출을 차단한다.
+  // (마이그레이션 이전 주문은 null일 수 있어 nullable)
+  @Enumerated(EnumType.STRING)
+  @Column(name = "pg_provider", length = 20)
+  private PgProvider pgProvider;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 30)
   private OrderStatus status;
@@ -71,23 +83,27 @@ public class Order {
   private LocalDateTime updatedAt;
 
   @Builder
-  private Order(Long userId, BigDecimal totalAmount, BigDecimal discountAmount, Long couponId,
-      OrderStatus status) {
+  private Order(String orderNo, Long userId, BigDecimal totalAmount, BigDecimal discountAmount,
+      Long couponId, PgProvider pgProvider, OrderStatus status) {
+    this.orderNo = orderNo;
     this.userId = userId;
     this.totalAmount = totalAmount;
     this.discountAmount = discountAmount;
     this.refundedAmount = BigDecimal.ZERO;
     this.couponId = couponId;
+    this.pgProvider = pgProvider;
     this.status = status;
   }
 
-  public static Order place(Long userId, BigDecimal totalAmount, BigDecimal discountAmount,
-      Long couponId) {
+  public static Order place(String orderNo, Long userId, BigDecimal totalAmount,
+      BigDecimal discountAmount, Long couponId, PgProvider pgProvider) {
     return Order.builder()
+        .orderNo(orderNo)
         .userId(userId)
         .totalAmount(totalAmount)
         .discountAmount(discountAmount == null ? BigDecimal.ZERO : discountAmount)
         .couponId(couponId)
+        .pgProvider(pgProvider)
         .status(OrderStatus.PENDING_PAYMENT)
         .build();
   }

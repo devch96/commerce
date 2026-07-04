@@ -8,8 +8,11 @@ import com.sparta.copa.copaorder.order.dto.response.OrderCheckoutResponse;
 import com.sparta.copa.copaorder.order.dto.response.OrderResponse;
 import com.sparta.copa.copaorder.order.service.OrderService;
 import jakarta.validation.Valid;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,36 +43,38 @@ public class OrderController {
   }
 
   // 결제 확정(Saga Phase 2). 프론트가 PG 리다이렉트 후 토큰을 담아 호출한다.
-  @PostMapping("/{orderId}/payment/confirm")
+  @PostMapping("/{orderNo}/payment/confirm")
   public ApiResponse<OrderResponse> confirmPayment(@RequestHeader(USER_ID_HEADER) Long userId,
-      @PathVariable Long orderId, @Valid @RequestBody ConfirmPaymentRequest request) {
-    return ApiResponse.success(orderService.confirmPayment(userId, orderId, request));
+      @PathVariable String orderNo, @Valid @RequestBody ConfirmPaymentRequest request) {
+    return ApiResponse.success(orderService.confirmPayment(userId, orderNo, request));
   }
 
   // 결제 실패/취소(failUrl 경유). 예약 해제 + 주문 취소.
-  @PostMapping("/{orderId}/payment/fail")
+  @PostMapping("/{orderNo}/payment/fail")
   public ApiResponse<OrderResponse> failPayment(@RequestHeader(USER_ID_HEADER) Long userId,
-      @PathVariable Long orderId) {
-    return ApiResponse.success(orderService.failPayment(userId, orderId));
+      @PathVariable String orderNo) {
+    return ApiResponse.success(orderService.failPayment(userId, orderNo));
   }
 
-  // 내 주문 목록(상태별 필터 선택).
+  // 내 주문 목록(상태별 필터 선택, 페이징 — 기본 최신순 20건).
   @GetMapping
-  public ApiResponse<List<OrderResponse>> myOrders(@RequestHeader(USER_ID_HEADER) Long userId,
-      @RequestParam(required = false) OrderStatus status) {
-    return ApiResponse.success(orderService.getMyOrders(userId, status));
+  public ApiResponse<Page<OrderResponse>> myOrders(@RequestHeader(USER_ID_HEADER) Long userId,
+      @RequestParam(required = false) OrderStatus status,
+      @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+      Pageable pageable) {
+    return ApiResponse.success(orderService.getMyOrders(userId, status, pageable));
   }
 
-  @GetMapping("/{orderId}")
+  @GetMapping("/{orderNo}")
   public ApiResponse<OrderResponse> getOrder(@RequestHeader(USER_ID_HEADER) Long userId,
-      @PathVariable Long orderId) {
-    return ApiResponse.success(orderService.getOrder(orderId, userId));
+      @PathVariable String orderNo) {
+    return ApiResponse.success(orderService.getOrder(orderNo, userId));
   }
 
   // 사용자 취소(배송 시작 전). 결제 환불 + 재고 복원.
-  @PostMapping("/{orderId}/cancel")
+  @PostMapping("/{orderNo}/cancel")
   public ApiResponse<OrderResponse> cancel(@RequestHeader(USER_ID_HEADER) Long userId,
-      @PathVariable Long orderId) {
-    return ApiResponse.success(orderService.cancelOrder(orderId, userId));
+      @PathVariable String orderNo) {
+    return ApiResponse.success(orderService.cancelOrder(orderNo, userId));
   }
 }

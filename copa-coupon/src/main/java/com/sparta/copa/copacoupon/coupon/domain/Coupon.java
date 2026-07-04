@@ -143,6 +143,14 @@ public class Coupon {
     this.issuedQuantity += 1;
   }
 
+  // 선착순(Redis) 발급 반영. 수량 통제는 Redis가 이미 했으므로 상태만 확인하고 발급 수량을 증가시킨다.
+  public void markFcfsIssued() {
+    if (status != CouponStatus.ACTIVE) {
+      throw new BusinessException(ErrorCode.COUPON_NOT_ISSUABLE);
+    }
+    this.issuedQuantity += 1;
+  }
+
   // 발급 시점 기준 만료 시각 산정.
   public LocalDateTime resolveExpiry(LocalDateTime issuedAt) {
     return switch (expirationType) {

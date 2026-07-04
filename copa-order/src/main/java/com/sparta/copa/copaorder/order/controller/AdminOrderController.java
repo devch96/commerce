@@ -26,14 +26,14 @@ public class AdminOrderController {
 
   private final OrderService orderService;
 
-  @PatchMapping("/{orderId}/status")
+  @PatchMapping("/{orderNo}/status")
   public ApiResponse<OrderResponse> changeStatus(
       @RequestHeader(value = USER_ROLE_HEADER, required = false) String role,
-      @PathVariable Long orderId,
+      @PathVariable String orderNo,
       @Valid @RequestBody AdminStatusRequest request) {
     if (!ADMIN_ROLE.equals(role)) {
       throw new BusinessException(ErrorCode.ACCESS_DENIED);
     }
-    return ApiResponse.success(orderService.changeStatus(orderId, request.getStatus()));
+    return ApiResponse.success(orderService.changeStatus(orderNo, request.getStatus()));
   }
 }

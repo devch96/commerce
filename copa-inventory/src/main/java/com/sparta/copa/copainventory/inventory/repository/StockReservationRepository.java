@@ -13,7 +13,7 @@ import org.springframework.data.repository.query.Param;
 public interface StockReservationRepository extends JpaRepository<StockReservation, Long> {
 
   // 멱등성 판단: 같은 주문으로 이미 예약이 있으면 재처리하지 않는다.
-  boolean existsByOrderId(Long orderId);
+  boolean existsByOrderId(String orderId);
 
   // TTL 만료 스윕: 결제를 방치한 RESERVED 예약을 찾아 해제한다.
   List<StockReservation> findByStatusAndExpiresAtBefore(
@@ -27,10 +27,10 @@ public interface StockReservationRepository extends JpaRepository<StockReservati
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select r from StockReservation r where r.orderId = :orderId and r.status = :status")
   List<StockReservation> findForUpdateByOrderIdAndStatus(
-      @Param("orderId") Long orderId, @Param("status") ReservationStatus status);
+      @Param("orderId") String orderId, @Param("status") ReservationStatus status);
 
   // 사용자 취소 복원용: 주문의 모든 예약 행을 잠근다(동시 복원 중복 차단).
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select r from StockReservation r where r.orderId = :orderId")
-  List<StockReservation> findForUpdateByOrderId(@Param("orderId") Long orderId);
+  List<StockReservation> findForUpdateByOrderId(@Param("orderId") String orderId);
 }

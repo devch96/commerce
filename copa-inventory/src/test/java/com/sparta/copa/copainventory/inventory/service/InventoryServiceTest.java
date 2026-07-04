@@ -38,7 +38,7 @@ class InventoryServiceTest {
   @InjectMocks
   private InventoryService inventoryService;
 
-  private ReserveRequest reserveRequest(Long orderId, Long productId, String optionKey, int qty) {
+  private ReserveRequest reserveRequest(String orderId, Long productId, String optionKey, int qty) {
     return ReserveRequest.builder()
         .orderId(orderId)
         .items(List.of(ReserveItemRequest.builder()
@@ -46,7 +46,7 @@ class InventoryServiceTest {
         .build();
   }
 
-  private StockReservation reserved(Long orderId, Long productId, String optionKey, int qty) {
+  private StockReservation reserved(String orderId, Long productId, String optionKey, int qty) {
     return StockReservation.reserve(orderId, productId, optionKey, qty,
         LocalDateTime.now().plusMinutes(5));
   }
@@ -55,10 +55,10 @@ class InventoryServiceTest {
   @DisplayName("예약하면 가용 재고를 차감하고 예약 기록을 남긴다")
   void reserveDecreasesStock() {
     Inventory inventory = Inventory.create(100L, "", 10);
-    given(reservationRepository.existsByOrderId(1L)).willReturn(false);
+    given(reservationRepository.existsByOrderId("ORD-1")).willReturn(false);
     given(inventoryRepository.findForUpdate(100L, "")).willReturn(Optional.of(inventory));
 
-    inventoryService.reserve(reserveRequest(1L, 100L, null, 3));
+    inventoryService.reserve(reserveRequest("ORD-1", 100L, null, 3));
 
     assertThat(inventory.getStock()).isEqualTo(7);
     verify(reservationRepository).save(any(StockReservation.class));
@@ -67,9 +67,9 @@ class InventoryServiceTest {
   @Test
   @DisplayName("같은 주문으로 이미 예약했으면 멱등하게 건너뛴다")
   void reserveIsIdempotent() {
-    given(reservationRepository.existsByOrderId(1L)).willReturn(true);
+    given(reservationRepository.existsByOrderId("ORD-1")).willReturn(true);
 
-    inventoryService.reserve(reserveRequest(1L, 100L, null, 3));
+    inventoryService.reserve(reserveRequest("ORD-1", 100L, null, 3));
 
     verify(inventoryRepository, never()).findForUpdate(any(), any());
     verify(reservationRepository, never()).save(any());
@@ -79,10 +79,10 @@ class InventoryServiceTest {
   @DisplayName("재고가 부족하면 OUT_OF_STOCK으로 예약을 거절한다")
   void reserveOutOfStock() {
     Inventory inventory = Inventory.create(100L, "", 2);
-    given(reservationRepository.existsByOrderId(1L)).willReturn(false);
+    given(reservationRepository.existsByOrderId("ORD-1")).willReturn(false);
     given(inventoryRepository.findForUpdate(100L, "")).willReturn(Optional.of(inventory));
 
-    assertThatThrownBy(() -> inventoryService.reserve(reserveRequest(1L, 100L, null, 3)))
+    assertThatThrownBy(() -> inventoryService.reserve(reserveRequest("ORD-1", 100L, null, 3)))
         .isInstanceOf(BusinessException.class)
         .extracting("errorCode").isEqualTo(ErrorCode.OUT_OF_STOCK);
     assertThat(inventory.getStock()).isEqualTo(2);
@@ -92,10 +92,10 @@ class InventoryServiceTest {
   @Test
   @DisplayName("재고 행이 없으면 INVENTORY_NOT_FOUND")
   void reserveInventoryNotFound() {
-    given(reservationRepository.existsByOrderId(1L)).willReturn(false);
+    given(reservationRepository.existsByOrderId("ORD-1")).willReturn(false);
     given(inventoryRepository.findForUpdate(100L, "")).willReturn(Optional.empty());
 
-    assertThatThrownBy(() -> inventoryService.reserve(reserveRequest(1L, 100L, null, 1)))
+    assertThatThrownBy(() -> inventoryService.reserve(reserveRequest("ORD-1", 100L, null, 1)))
         .isInstanceOf(BusinessException.class)
         .extracting("errorCode").isEqualTo(ErrorCode.INVENTORY_NOT_FOUND);
   }
@@ -103,11 +103,10 @@ class InventoryServiceTest {
   @Test
   @DisplayName("확정하면 예약을 CONFIRMED로 전환한다")
   void confirmTransitionsStatus() {
-    StockReservation reservation = reserved(1L, 100L, "", 3);
-    given(reservationRepository.findForUpdateByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
-        .willReturn(List.of(reservation));
+    StockReservation reservation = reserved("ORD-1", 100L, "", 3);
+    given(reservationRepository.findForUpdateByOrderId("ORD-1")).willReturn(List.of(reservation));
 
-    inventoryService.confirm(1L);
+    inventoryService.confirm("ORD-1");
 
     assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
   }
@@ -115,26 +114,51 @@ class InventoryServiceTest {
   @Test
   @DisplayName("해제하면 가용 재고를 복원하고 예약을 RELEASED로 전환한다")
   void releaseRestoresStock() {
-    StockReservation reservation = reserved(1L, 100L, "", 3);
+    StockReservation reservation = reserved("ORD-1", 100L, "", 3);
     Inventory inventory = Inventory.create(100L, "", 7);
-    given(reservationRepository.findForUpdateByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
+    given(reservationRepository.findForUpdateByOrderIdAndStatus("ORD-1", ReservationStatus.RESERVED))
         .willReturn(List.of(reservation));
     given(inventoryRepository.findForUpdate(100L, "")).willReturn(Optional.of(inventory));
 
-    inventoryService.release(1L);
+    inventoryService.release("ORD-1");
 
     assertThat(inventory.getStock()).isEqualTo(10);
     assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.RELEASED);
   }
 
   @Test
-  @DisplayName("RESERVED 예약이 없으면 확정은 멱등하게 아무것도 하지 않는다")
-  void confirmIdempotentWhenNothingReserved() {
-    given(reservationRepository.findForUpdateByOrderIdAndStatus(1L, ReservationStatus.RESERVED))
-        .willReturn(List.of());
+  @DisplayName("이미 CONFIRMED인 예약만 있으면 확정은 멱등하게 아무것도 하지 않는다")
+  void confirmIdempotentWhenAlreadyConfirmed() {
+    StockReservation reservation = reserved("ORD-1", 100L, "", 3);
+    reservation.confirm();
+    given(reservationRepository.findForUpdateByOrderId("ORD-1")).willReturn(List.of(reservation));
 
-    inventoryService.confirm(1L);
+    inventoryService.confirm("ORD-1");
 
+    assertThat(reservation.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
     verify(inventoryRepository, never()).findForUpdate(eq(100L), any());
+  }
+
+  @Test
+  @DisplayName("살아있는 예약이 없으면(TTL 해제 후 등) 확정은 RESERVATION_EXPIRED로 실패한다")
+  void confirmFailsWhenNoAliveReservation() {
+    // TTL 스케줄러가 해제해 RELEASED만 남은 경우 — 조용히 성공하면 재고 차감 없이 주문이 완료(오버셀)된다.
+    StockReservation released = reserved("ORD-1", 100L, "", 3);
+    released.release();
+    given(reservationRepository.findForUpdateByOrderId("ORD-1")).willReturn(List.of(released));
+
+    assertThatThrownBy(() -> inventoryService.confirm("ORD-1"))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode").isEqualTo(ErrorCode.RESERVATION_EXPIRED);
+  }
+
+  @Test
+  @DisplayName("예약 행이 아예 없어도 확정은 RESERVATION_EXPIRED로 실패한다")
+  void confirmFailsWhenNoReservationRows() {
+    given(reservationRepository.findForUpdateByOrderId("ORD-1")).willReturn(List.of());
+
+    assertThatThrownBy(() -> inventoryService.confirm("ORD-1"))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode").isEqualTo(ErrorCode.RESERVATION_EXPIRED);
   }
 }

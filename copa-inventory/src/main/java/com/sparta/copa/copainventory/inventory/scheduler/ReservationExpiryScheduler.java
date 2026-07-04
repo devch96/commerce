@@ -26,7 +26,7 @@ public class ReservationExpiryScheduler {
 
   @Scheduled(fixedDelayString = "${inventory.reservation.sweep-interval-ms:60000}")
   public void releaseExpiredReservations() {
-    Set<Long> expiredOrderIds = new LinkedHashSet<>();
+    Set<String> expiredOrderIds = new LinkedHashSet<>();
     for (StockReservation reservation : reservationRepository
         .findByStatusAndExpiresAtBefore(ReservationStatus.RESERVED, LocalDateTime.now())) {
       expiredOrderIds.add(reservation.getOrderId());
@@ -36,7 +36,7 @@ public class ReservationExpiryScheduler {
     }
     log.info("TTL 만료 예약 해제 대상 주문 {}건", expiredOrderIds.size());
     // 주문 단위로 각자 트랜잭션에서 해제(한 건 실패가 나머지를 막지 않게).
-    for (Long orderId : expiredOrderIds) {
+    for (String orderId : expiredOrderIds) {
       try {
         inventoryService.release(orderId);
       } catch (RuntimeException e) {

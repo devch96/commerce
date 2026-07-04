@@ -1,6 +1,6 @@
 package com.sparta.copa.copainventory.inventory.dto.request;
 
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,6 +14,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderReferenceRequest {
 
-  @NotNull
-  private Long orderId;
+  @NotBlank
+  private String orderId;
 }

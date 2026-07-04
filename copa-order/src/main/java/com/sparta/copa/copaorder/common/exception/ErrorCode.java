@@ -12,6 +12,8 @@ public enum ErrorCode {
   // 재고 예약 실패(경쟁에서 밀림) → 주문 취소.
   OUT_OF_STOCK(HttpStatus.CONFLICT, "재고가 부족합니다."),
   PAYMENT_FAILED(HttpStatus.PAYMENT_REQUIRED, "결제에 실패했습니다."),
+  // Phase 2 확정 요청이 주문의 PG와 다르거나 provider별 필수 토큰(paymentKey/pgToken)이 빠진 경우.
+  INVALID_PG_REQUEST(HttpStatus.BAD_REQUEST, "결제 확정 요청이 올바르지 않습니다."),
   // 쿠폰 적용 불가(최소금액 미달·만료·소유/상태 부적합) → 주문 거절.
   COUPON_NOT_APPLICABLE(HttpStatus.BAD_REQUEST, "쿠폰을 적용할 수 없습니다."),
   ORDER_NOT_CANCELLABLE(HttpStatus.BAD_REQUEST, "현재 상태에서는 취소할 수 없습니다."),

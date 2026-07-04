@@ -73,6 +73,23 @@ public class CouponService {
     return UserCouponResponse.from(userCoupon);
   }
 
+  /**
+   * 선착순(Redis) 통과분을 DB에 적재(Kafka 컨슈머 호출). Redis가 수량·1인1매를 이미 통제했으므로 락은 불필요하다.
+   * 정상 중복(at-least-once 재배달)은 선존재 검사로 멱등 no-op 처리한다. 극히 드문 동시 경합은
+   * (couponId,userId) 유니크 위반으로 트랜잭션이 롤백되고, Kafka 재배달 시 선존재 검사가 no-op으로 흡수한다.
+   */
+  @Transactional
+  public void persistFcfsIssued(Long couponId, Long userId) {
+    if (userCouponRepository.existsByCoupon_IdAndUserId(couponId, userId)) {
+      return;
+    }
+    Coupon coupon = couponRepository.findById(couponId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+    coupon.markFcfsIssued();
+    userCouponRepository.save(
+        UserCoupon.issue(coupon, userId, coupon.resolveExpiry(LocalDateTime.now())));
+  }
+
   @Transactional(readOnly = true)
   public List<UserCouponResponse> getMyCoupons(Long userId) {
     return userCouponRepository.findByUserId(userId).stream()
@@ -102,7 +119,7 @@ public class CouponService {
 
   // 사용 확정(RESERVED→USED). 결제 성공. 쿠폰 없는 주문이거나 이미 확정이면 멱등 no-op.
   @Transactional
-  public void confirm(Long orderId) {
+  public void confirm(String orderId) {
     UserCoupon userCoupon = userCouponRepository.findByOrderIdForUpdate(orderId).orElse(null);
     if (userCoupon == null || userCoupon.isUsedFor(orderId)) {
       return;
@@ -112,7 +129,7 @@ public class CouponService {
 
   // 선점 해제(RESERVED→ISSUED). 결제 전 실패 보상. 선점이 없으면 멱등 no-op.
   @Transactional
-  public void release(Long orderId) {
+  public void release(String orderId) {
     UserCoupon userCoupon = userCouponRepository.findByOrderIdForUpdate(orderId).orElse(null);
     if (userCoupon == null || userCoupon.getStatus() != UserCouponStatus.RESERVED) {
       return;
@@ -122,7 +139,7 @@ public class CouponService {
 
   // 사용 복원(USED/RESERVED→ISSUED). 결제 완료 주문의 사용자 취소. 이미 ISSUED면 멱등 no-op.
   @Transactional
-  public void restore(Long orderId) {
+  public void restore(String orderId) {
     UserCoupon userCoupon = userCouponRepository.findByOrderIdForUpdate(orderId).orElse(null);
     if (userCoupon == null || userCoupon.getStatus() == UserCouponStatus.ISSUED) {
       return;

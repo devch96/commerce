@@ -19,11 +19,11 @@ public class CouponClient {
   private final CouponFeignClient feign;
 
   // 선점(검증 + 할인 계산). 적용 불가(최소금액·만료·소유/상태)는 4xx → COUPON_NOT_APPLICABLE로 주문 거절.
-  public BigDecimal reserve(Long userCouponId, Long userId, Long orderId, BigDecimal orderAmount) {
+  public BigDecimal reserve(Long userCouponId, Long userId, String orderNo, BigDecimal orderAmount) {
     try {
       ApiEnvelope<CouponReserveView> response = feign.reserve(Map.of(
           "userCouponId", userCouponId, "userId", userId,
-          "orderId", orderId, "orderAmount", orderAmount));
+          "orderId", orderNo, "orderAmount", orderAmount));
       if (response == null || response.getData() == null
           || response.getData().getDiscountAmount() == null) {
         throw new BusinessException(ErrorCode.DEPENDENT_SERVICE_ERROR);
@@ -37,17 +37,17 @@ public class CouponClient {
     }
   }
 
-  public void confirm(Long orderId) {
-    safe(() -> feign.confirm(Map.of("orderId", orderId)));
+  public void confirm(String orderNo) {
+    safe(() -> feign.confirm(Map.of("orderId", orderNo)));
   }
 
-  public void release(Long orderId) {
-    safe(() -> feign.release(Map.of("orderId", orderId)));
+  public void release(String orderNo) {
+    safe(() -> feign.release(Map.of("orderId", orderNo)));
   }
 
   // 사용 확정된 쿠폰까지 되돌린다(결제 완료 주문의 사용자 취소).
-  public void restore(Long orderId) {
-    safe(() -> feign.restore(Map.of("orderId", orderId)));
+  public void restore(String orderNo) {
+    safe(() -> feign.restore(Map.of("orderId", orderNo)));
   }
 
   private void safe(Runnable call) {

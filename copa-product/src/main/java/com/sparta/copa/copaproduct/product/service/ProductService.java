@@ -16,6 +16,7 @@ import com.sparta.copa.copaproduct.product.dto.response.ProductResponse;
 import com.sparta.copa.copaproduct.product.repository.ProductCategoryRepository;
 import com.sparta.copa.copaproduct.product.repository.ProductQueryRepository;
 import com.sparta.copa.copaproduct.product.repository.ProductRepository;
+import java.math.BigDecimal;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -84,6 +85,7 @@ public class ProductService {
    */
   @Transactional(readOnly = true)
   public Page<ProductResponse> searchProducts(ProductSearchCondition condition, Pageable pageable) {
+    validatePriceRange(condition.getMinPrice(), condition.getMaxPrice());
     // 상위 카테고리로 검색해도 하위 상품이 잡히도록 하위 트리를 펼친다.
     List<Long> categoryIds = condition.getCategoryId() != null
         ? categoryService.collectSubtreeIds(condition.getCategoryId())
@@ -91,6 +93,16 @@ public class ProductService {
     Page<Product> products = productQueryRepository.search(
         condition, categoryIds, PUBLICLY_VISIBLE, pageable);
     return withCategoryIds(products);
+  }
+
+  // 검색 가격 범위 정합성: 음수·역전(min>max)은 400으로 거절한다(조용한 빈 결과 대신 잘못된 입력을 알린다).
+  private void validatePriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
+    boolean negative = (minPrice != null && minPrice.signum() < 0)
+        || (maxPrice != null && maxPrice.signum() < 0);
+    boolean inverted = minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0;
+    if (negative || inverted) {
+      throw new BusinessException(ErrorCode.INVALID_SEARCH_CONDITION);
+    }
   }
 
   // 상품 페이지에 카테고리 id를 배치 조회로 채워 응답으로 변환(N+1 회피).
