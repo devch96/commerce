@@ -1,6 +1,7 @@
 package com.sparta.copa.copagateway.filter;
 
 import com.sparta.copa.copagateway.config.GatewayProperties;
+import com.sparta.copa.copagateway.jwt.InternalTokenIssuer;
 import com.sparta.copa.copagateway.jwt.JwtProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -31,9 +32,12 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String USER_ID_HEADER = "X-User-Id";
   private static final String USER_ROLE_HEADER = "X-User-Role";
+  private static final String IDENTITY_HEADER = "X-Copa-Identity";
+  private static final String SERVICE_HEADER = "X-Copa-Service";
   private static final String ROLE_CLAIM = "role";
 
   private final JwtProvider jwtProvider;
+  private final InternalTokenIssuer internalTokenIssuer;
   private final GatewayProperties gatewayProperties;
   private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
@@ -53,9 +57,11 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     try {
       Claims claims = jwtProvider.parse(token.get());
+      // 하위 서비스는 원시 X-User-* 헤더 대신 게이트웨이가 서명한 신원 토큰만 신뢰한다(내부 위조 방어).
+      String identityToken = internalTokenIssuer.issueIdentity(
+          claims.getSubject(), claims.get(ROLE_CLAIM, String.class));
       ServerHttpRequest authorized = request.mutate()
-          .header(USER_ID_HEADER, claims.getSubject())
-          .header(USER_ROLE_HEADER, claims.get(ROLE_CLAIM, String.class))
+          .header(IDENTITY_HEADER, identityToken)
           .build();
       return chain.filter(sanitized.mutate().request(authorized).build());
     } catch (JwtException | IllegalArgumentException e) {
@@ -64,12 +70,15 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     }
   }
 
-  // 클라이언트가 임의로 주입한 신뢰 헤더는 위변조 가능성이 있으므로 게이트웨이 진입 시 제거한다.
+  // 클라이언트가 임의로 주입한 신뢰 헤더는 위변조 가능성이 있으므로 게이트웨이 진입 시 모두 제거한다.
+  // 원시 X-User-*뿐 아니라 게이트웨이만 발급해야 하는 X-Copa-Identity/X-Copa-Service도 차단한다.
   private ServerWebExchange stripTrustedHeaders(ServerWebExchange exchange) {
     ServerHttpRequest request = exchange.getRequest().mutate()
         .headers(headers -> {
           headers.remove(USER_ID_HEADER);
           headers.remove(USER_ROLE_HEADER);
+          headers.remove(IDENTITY_HEADER);
+          headers.remove(SERVICE_HEADER);
         })
         .build();
     return exchange.mutate().request(request).build();

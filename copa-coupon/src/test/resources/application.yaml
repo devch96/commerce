@@ -14,6 +14,9 @@ spring:
 
 # 테스트는 Kafka 브로커가 없으므로 선착순 발급 컨슈머(@KafkaListener)를 비활성화한다.
 copa:
+  # 테스트는 내부 인증 필터를 끈다(컨트롤러 테스트가 X-User-* 헤더를 직접 주입).
+  security:
+    enabled: false
   coupon:
     fcfs:
       consumer:

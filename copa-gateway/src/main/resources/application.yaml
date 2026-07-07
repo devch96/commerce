@@ -8,6 +8,12 @@ spring:
 jwt:
   secret: ${JWT_SECRET:local-dev-secret-please-change-this-to-a-shared-256-bit-key}
 
+# 내부 신원/서비스 토큰 서명용 공유 시크릿(HS256). 게이트웨이가 신원 토큰을 발급하고
+# 하위 서비스가 같은 시크릿으로 검증한다. 운영에서는 반드시 환경변수로 교체한다.
+copa:
+  internal:
+    secret: ${COPA_INTERNAL_SECRET:local-dev-internal-secret-please-change-this-to-a-256-bit-value}
+
 gateway:
   auth-service-uri: ${AUTH_SERVICE_URI:http://localhost:8081}
   product-service-uri: ${PRODUCT_SERVICE_URI:http://localhost:8082}

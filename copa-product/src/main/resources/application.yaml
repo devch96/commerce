@@ -47,6 +47,12 @@ spring:
 
 # outbox 릴레이: 미발행 이벤트를 폴링해 Kafka로 발행한다.
 copa:
+  # 내부 인증 필터: 게이트웨이 신원 토큰 검증 + /internal 서비스 토큰 검증(운영 on).
+  security:
+    enabled: true
+  # 신원/서비스 토큰 서명 검증용 공유 시크릿(게이트웨이와 동일 값이어야 한다).
+  internal:
+    secret: ${COPA_INTERNAL_SECRET:local-dev-internal-secret-please-change-this-to-a-256-bit-value}
   outbox:
     relay:
       enabled: true

@@ -36,6 +36,11 @@ dependencies {
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'
 
+    // 게이트웨이가 서명한 내부 신원/서비스 토큰 검증(HS256).
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
     // 상품 생성·검색 색인 이벤트를 outbox 릴레이가 Kafka로 발행한다.
     implementation 'org.springframework.kafka:spring-kafka'
 

@@ -313,8 +313,9 @@ services:
     build:
       context: ./copa-user
     container_name: copa-user
-    ports:
-      - "8081:8081"
+    # 내부 서비스는 호스트에 포트를 노출하지 않는다(게이트웨이만 외부 진입점). 컨테이너 네트워크 내에서만 통신.
+    expose:
+      - "8081"
     environment:
       DB_URL: "jdbc:mysql://copa-auth-mysql:3306/copa_auth?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
       DB_USERNAME: copa
@@ -325,6 +326,7 @@ services:
       REDIS_HOST: copa-auth-redis
       REDIS_PORT: 6379
       JWT_SECRET: local-dev-secret-please-change-this-to-a-shared-256-bit-key
+      COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
       TZ: Asia/Seoul
     depends_on:
       copa-auth-mysql:
@@ -336,8 +338,9 @@ services:
     build:
       context: ./copa-product
     container_name: copa-product
-    ports:
-      - "8082:8082"
+    # 내부 서비스는 호스트에 포트를 노출하지 않는다(게이트웨이만 외부 진입점). 컨테이너 네트워크 내에서만 통신.
+    expose:
+      - "8082"
     environment:
       DB_URL: "jdbc:mysql://copa-product-mysql:3306/copa_product?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
       DB_USERNAME: copa
@@ -350,6 +353,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: copa-kafka:29092
       # 상품 전문 검색·집계용 Elasticsearch(ELK 로그 클러스터 재사용).
       ELASTICSEARCH_URIS: http://copa-elasticsearch:9200
+      COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
       TZ: Asia/Seoul
     depends_on:
       copa-product-mysql:
@@ -365,8 +369,9 @@ services:
     build:
       context: ./copa-inventory
     container_name: copa-inventory
-    ports:
-      - "8083:8083"
+    # 내부 서비스는 호스트에 포트를 노출하지 않는다(게이트웨이만 외부 진입점). 컨테이너 네트워크 내에서만 통신.
+    expose:
+      - "8083"
     environment:
       DB_URL: "jdbc:mysql://copa-inventory-mysql:3306/copa_inventory?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
       DB_USERNAME: copa
@@ -375,6 +380,7 @@ services:
       LOGSTASH_HOST: copa-logstash
       LOGSTASH_PORT: 5000
       KAFKA_BOOTSTRAP_SERVERS: copa-kafka:29092
+      COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
       TZ: Asia/Seoul
     depends_on:
       copa-inventory-mysql:
@@ -386,8 +392,9 @@ services:
     build:
       context: ./copa-payment
     container_name: copa-payment
-    ports:
-      - "8084:8084"
+    # 내부 서비스는 호스트에 포트를 노출하지 않는다(게이트웨이만 외부 진입점). 컨테이너 네트워크 내에서만 통신.
+    expose:
+      - "8084"
     environment:
       DB_URL: "jdbc:mysql://copa-payment-mysql:3306/copa_payment?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
       DB_USERNAME: copa
@@ -398,6 +405,7 @@ services:
       # 실 PG 시크릿은 배포 환경에서 주입한다(미설정 시 앱 기본 더미값 사용).
       TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-test_sk_dummy}
       KAKAO_SECRET_KEY: ${KAKAO_SECRET_KEY:-DEV_KAKAO_DUMMY}
+      COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
       TZ: Asia/Seoul
     depends_on:
       copa-payment-mysql:
@@ -407,8 +415,9 @@ services:
     build:
       context: ./copa-order
     container_name: copa-order
-    ports:
-      - "8085:8085"
+    # 내부 서비스는 호스트에 포트를 노출하지 않는다(게이트웨이만 외부 진입점). 컨테이너 네트워크 내에서만 통신.
+    expose:
+      - "8085"
     environment:
       DB_URL: "jdbc:mysql://copa-order-mysql:3306/copa_order?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
       DB_USERNAME: copa
@@ -420,6 +429,7 @@ services:
       INVENTORY_URL: http://copa-inventory:8083
       PAYMENT_URL: http://copa-payment:8084
       COUPON_URL: http://copa-coupon:8086
+      COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
       TZ: Asia/Seoul
     depends_on:
       copa-order-mysql:
@@ -437,8 +447,9 @@ services:
     build:
       context: ./copa-coupon
     container_name: copa-coupon
-    ports:
-      - "8086:8086"
+    # 내부 서비스는 호스트에 포트를 노출하지 않는다(게이트웨이만 외부 진입점). 컨테이너 네트워크 내에서만 통신.
+    expose:
+      - "8086"
     environment:
       DB_URL: "jdbc:mysql://copa-coupon-mysql:3306/copa_coupon?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
       DB_USERNAME: copa
@@ -449,6 +460,7 @@ services:
       ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
       LOGSTASH_HOST: copa-logstash
       LOGSTASH_PORT: 5000
+      COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
       TZ: Asia/Seoul
     depends_on:
       copa-coupon-mysql:
@@ -474,6 +486,7 @@ services:
       PAYMENT_SERVICE_URI: http://copa-payment:8084
       COUPON_SERVICE_URI: http://copa-coupon:8086
       JWT_SECRET: local-dev-secret-please-change-this-to-a-shared-256-bit-key
+      COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
       TZ: Asia/Seoul
     depends_on:
       copa-user:

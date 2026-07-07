@@ -45,6 +45,12 @@ spring:
 
 # 선착순 쿠폰(Redis 원자 발급 + Kafka 비동기 DB 반영).
 copa:
+  # 내부 인증 필터: 게이트웨이 신원 토큰 검증 + /internal 서비스 토큰 검증(운영 on).
+  security:
+    enabled: true
+  # 신원/서비스 토큰 서명 검증용 공유 시크릿(게이트웨이와 동일 값이어야 한다).
+  internal:
+    secret: ${COPA_INTERNAL_SECRET:local-dev-internal-secret-please-change-this-to-a-256-bit-value}
   coupon:
     fcfs:
       # 관리자가 오픈 시 수량을 생략하면 시드할 임시 발급 상한.

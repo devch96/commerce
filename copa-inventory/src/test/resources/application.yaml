@@ -17,3 +17,8 @@ spring:
       auto-startup: false
     consumer:
       group-id: copa-inventory-test
+
+# 테스트는 내부 인증 필터를 끈다(컨트롤러 테스트가 X-User-* 헤더를 직접 주입).
+copa:
+  security:
+    enabled: false

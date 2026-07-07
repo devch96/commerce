@@ -22,7 +22,9 @@ spring:
         enabled: false
 
 # 테스트는 브로커가 없으므로 outbox 릴레이와 검색 색인기(Kafka consumer)를 끈다.
-copa:
+copa:  # 테스트는 내부 인증 필터를 끈다. 컨트롤러 테스트가 X-User-* 헤더를 직접 주입하는 기존 방식을 유지.
+  security:
+    enabled: false
   outbox:
     relay:
       enabled: false

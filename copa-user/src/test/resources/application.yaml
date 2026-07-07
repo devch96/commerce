@@ -20,3 +20,7 @@ jwt:
   secret: copa-user-test-secret-key-must-be-at-least-256-bits-long-000000
   access-expiration-millis: 1800000
   refresh-expiration-millis: 1209600000
+# 테스트는 내부 인증 필터를 끈다(컨트롤러 테스트가 X-User-* 헤더를 직접 주입).
+copa:
+  security:
+    enabled: false

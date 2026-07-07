@@ -8,7 +8,7 @@ Redis 선착순 쿠폰, Elasticsearch 검색, ELK·Zipkin·Prometheus/Grafana �
 
 ```
                         ┌──────────────────────┐
-  Client ──────────────▶│  copa-gateway :8000  │  JWT 검증 → X-User-Id/Role 주입
+  Client ──────────────▶│  copa-gateway :8000  │  JWT 검증 → 서명 신원 토큰(X-Copa-Identity) 발급
                         │  (Spring Cloud GW)   │  화이트리스트(비로그인 공개) 지원
                         └──────────┬───────────┘
       ┌────────────┬───────────────┼───────────────┬────────────┐
@@ -38,7 +38,7 @@ Redis 선착순 쿠폰, Elasticsearch 검색, ELK·Zipkin·Prometheus/Grafana �
 
 | 서비스 | 포트 | 역할 | 저장소 |
 |--------|------|------|--------|
-| `copa-gateway` | 8000 | WebFlux 게이트웨이. JWT 검증, 신뢰 헤더(X-User-Id/Role) 주입·스트리핑, `METHOD path` 화이트리스트 | — |
+| `copa-gateway` | 8000 | WebFlux 게이트웨이. JWT 검증 → 서명 신원 토큰(X-Copa-Identity) 발급, 신뢰 헤더 스트리핑, `METHOD path` 화이트리스트 | — |
 | `copa-user` | 8081 | 회원가입/로그인/재발급(RTR)·프로필·주소. `auth`/`user` 패키지 분리 | MySQL(3306) + Redis(6379, refresh 토큰) |
 | `copa-product` | 8082 | 상품 CRUD(soft delete)·무한 뎁스 옵션 트리·옵션/조합 할인(최장 일치)·카테고리·장바구니·검색 | MySQL(3307) + Redis(6380, 캐시) + ES |
 | `copa-inventory` | 8083 | 옵션(optionKey)별 재고의 권위 원천. reserve→confirm/release 모델, 비관적 락, TTL 자동 해제 | MySQL(3308) |
@@ -91,7 +91,11 @@ Phase 2  POST /orders/{orderNo}/payment/confirm   (PG 리다이렉트 후)
 - 카테고리 트리: 전체 스냅샷 단일 키(`categories:all`) Look-Aside — 상품 목록/검색 핫패스의 반복 findAll 제거.
 
 ### 보안·견고성
-- 게이트웨이가 클라이언트발 X-User-Id/Role을 **스트리핑 후 재주입**(위조 차단), 서비스는 ADMIN을 방어적 재검증.
+- **서비스 간 신뢰(내부 위조 방어)** — 신뢰의 근거를 "네트워크 위치"에서 "서명 검증"으로 이동. 게이트웨이가 JWT 검증 후
+  `uid`·`role`을 담은 **서명 신원 토큰**(`X-Copa-Identity`, HS256, TTL 60s)을 발급하고, 각 서비스의 `InternalAuthFilter`가
+  이를 검증한 값에서만 `X-User-Id`/`X-User-Role`을 재구성한다(클라이언트가 붙인 원시 헤더는 무조건 제거 → 위조 불가).
+  게이트웨이를 거치지 않는 `/internal/**`은 호출자(order)가 붙인 **서비스 토큰**(`X-Copa-Service`)을 검증해 무단 호출을 차단.
+  docker-compose는 앱 서비스 포트를 호스트에 노출하지 않고(`expose`) **게이트웨이(8000)만** 외부 오픈. 자세한 내용은 [docs/WEEK_17/WEEK_17_6일차.md](docs/WEEK_17/WEEK_17_6일차.md).
 - 결제 조회 등 리소스 접근은 소유자 검증(IDOR 방어). 금액은 `BigDecimal`, PG 승인 금액은 서버 저장값만 신뢰.
 - 전 서비스 공통 예외 봉투(잘못된 JSON/enum·타입 미스매치·헤더 누락·500 포함), 검색 파라미터 검증(음수·역전 400).
 
