@@ -3,11 +3,13 @@ package com.sparta.copa.copaorder.order.client;
 import com.sparta.copa.copaorder.common.exception.BusinessException;
 import com.sparta.copa.copaorder.common.exception.ErrorCode;
 import com.sparta.copa.copaorder.order.client.dto.ApiEnvelope;
+import com.sparta.copa.copaorder.order.client.dto.KakaoConfirmRequest;
+import com.sparta.copa.copaorder.order.client.dto.KakaoReadyRequest;
 import com.sparta.copa.copaorder.order.client.dto.PaymentView;
 import com.sparta.copa.copaorder.order.client.dto.PgReadyView;
+import com.sparta.copa.copaorder.order.client.dto.TossConfirmRequest;
 import com.sparta.copa.copaorder.order.client.feign.PaymentFeignClient;
 import feign.FeignException;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -21,8 +23,8 @@ public class PaymentClient {
   // 카카오 준비: tid 발급 + 결제창 리다이렉트 URL 확보.
   public PgReadyView kakaoReady(String orderNo, Long userId, Long amount, String itemName) {
     try {
-      ApiEnvelope<PgReadyView> response = feign.kakaoReady(userId, Map.of(
-          "orderId", orderNo, "amount", amount, "itemName", itemName));
+      ApiEnvelope<PgReadyView> response = feign.kakaoReady(userId,
+          new KakaoReadyRequest(orderNo, amount, itemName));
       return unwrapReady(response);
     } catch (FeignException e) {
       throw new BusinessException(ErrorCode.DEPENDENT_SERVICE_ERROR);
@@ -32,8 +34,8 @@ public class PaymentClient {
   // 카카오 승인. 금액은 결제 서비스가 ready 때 저장한 값을 신뢰 원천으로 사용한다.
   public PaymentView kakaoConfirm(String orderNo, Long userId, String pgToken) {
     try {
-      ApiEnvelope<PaymentView> response = feign.kakaoConfirm(userId, Map.of(
-          "orderId", orderNo, "pgToken", pgToken));
+      ApiEnvelope<PaymentView> response = feign.kakaoConfirm(userId,
+          new KakaoConfirmRequest(orderNo, pgToken));
       return unwrapPayment(response);
     } catch (FeignException e) {
       throw toConfirmError(e);
@@ -43,8 +45,8 @@ public class PaymentClient {
   // 토스 승인. 서버가 계산한 payable을 금액으로 넘겨 위변조를 차단한다.
   public PaymentView tossConfirm(String orderNo, Long userId, Long amount, String paymentKey) {
     try {
-      ApiEnvelope<PaymentView> response = feign.tossConfirm(userId, Map.of(
-          "orderId", orderNo, "amount", amount, "paymentKey", paymentKey));
+      ApiEnvelope<PaymentView> response = feign.tossConfirm(userId,
+          new TossConfirmRequest(orderNo, amount, paymentKey));
       return unwrapPayment(response);
     } catch (FeignException e) {
       throw toConfirmError(e);

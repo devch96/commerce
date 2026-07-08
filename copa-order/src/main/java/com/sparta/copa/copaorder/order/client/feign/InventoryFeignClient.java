@@ -1,6 +1,7 @@
 package com.sparta.copa.copaorder.order.client.feign;
 
-import java.util.Map;
+import com.sparta.copa.copaorder.order.client.dto.InventoryReserveRequest;
+import com.sparta.copa.copaorder.order.client.dto.OrderRefRequest;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -10,14 +11,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 public interface InventoryFeignClient {
 
   @PostMapping("/internal/inventory/reserve")
-  void reserve(@RequestBody Map<String, Object> body);
+  void reserve(@RequestBody InventoryReserveRequest body);
 
   @PostMapping("/internal/inventory/confirm")
-  void confirm(@RequestBody Map<String, Object> body);
+  void confirm(@RequestBody OrderRefRequest body);
 
   @PostMapping("/internal/inventory/release")
-  void release(@RequestBody Map<String, Object> body);
+  void release(@RequestBody OrderRefRequest body);
 
   @PostMapping("/internal/inventory/restore")
-  void restore(@RequestBody Map<String, Object> body);
+  void restore(@RequestBody OrderRefRequest body);
 }

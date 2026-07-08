@@ -1,8 +1,9 @@
 package com.sparta.copa.copaorder.order.client.feign;
 
 import com.sparta.copa.copaorder.order.client.dto.ApiEnvelope;
+import com.sparta.copa.copaorder.order.client.dto.CouponReserveRequest;
 import com.sparta.copa.copaorder.order.client.dto.CouponReserveView;
-import java.util.Map;
+import com.sparta.copa.copaorder.order.client.dto.OrderRefRequest;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -12,14 +13,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 public interface CouponFeignClient {
 
   @PostMapping("/internal/coupons/reserve")
-  ApiEnvelope<CouponReserveView> reserve(@RequestBody Map<String, Object> body);
+  ApiEnvelope<CouponReserveView> reserve(@RequestBody CouponReserveRequest body);
 
   @PostMapping("/internal/coupons/confirm")
-  void confirm(@RequestBody Map<String, Object> body);
+  void confirm(@RequestBody OrderRefRequest body);
 
   @PostMapping("/internal/coupons/release")
-  void release(@RequestBody Map<String, Object> body);
+  void release(@RequestBody OrderRefRequest body);
 
   @PostMapping("/internal/coupons/restore")
-  void restore(@RequestBody Map<String, Object> body);
+  void restore(@RequestBody OrderRefRequest body);
 }
