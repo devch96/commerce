@@ -26,6 +26,9 @@ public class RouteConfig {
         .route("copa-coupon", route -> route
             .path("/coupons/**", "/admin/coupons/**")
             .uri(properties.getCouponServiceUri().toString()))
+        .route("copa-ticket", route -> route
+            .path("/events/**", "/tickets/**", "/admin/events/**")
+            .uri(properties.getTicketServiceUri().toString()))
         .build();
   }
 }

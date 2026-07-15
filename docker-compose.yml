@@ -184,6 +184,44 @@ services:
       timeout: 5s
       retries: 5
 
+  copa-ticket-mysql:
+    image: mysql:8.0
+    container_name: copa-ticket-mysql
+    # 호스트 포트 충돌을 피하려 3312로 매핑한다.
+    ports:
+      - "3312:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: copa_ticket
+      MYSQL_USER: copa
+      MYSQL_PASSWORD: copa
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - copa-ticket-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  copa-ticket-redis:
+    image: redis:7.2
+    container_name: copa-ticket-redis
+    # 선착순 예매의 권위 데이터(좌석·1인1매·대기열·입장 허가). auth(6379)·product(6380)·coupon(6381)과 포트 충돌을 피해 6382로 매핑.
+    ports:
+      - "6382:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - copa-ticket-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Kafka 브로커(KRaft 모드, 단일 노드). 리스너를 둘로 나눈다:
   #  - EXTERNAL(localhost:9092): 호스트에서 직접 실행하는 앱/툴 접근용(기존 동작 유지, 9092 매핑).
   #  - INTERNAL(copa-kafka:29092): compose 네트워크 안의 컨테이너 접근용(advertised가 컨테이너 호스트명).
@@ -470,6 +508,33 @@ services:
       copa-kafka:
         condition: service_healthy
 
+  copa-ticket:
+    build:
+      context: ./copa-ticket
+    container_name: copa-ticket
+    # 내부 서비스는 호스트에 포트를 노출하지 않는다(게이트웨이만 외부 진입점). 컨테이너 네트워크 내에서만 통신.
+    expose:
+      - "8087"
+    environment:
+      DB_URL: "jdbc:mysql://copa-ticket-mysql:3306/copa_ticket?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
+      DB_USERNAME: copa
+      DB_PASSWORD: copa
+      REDIS_HOST: copa-ticket-redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: copa-kafka:29092
+      ZIPKIN_ENDPOINT: http://copa-zipkin:9411/api/v2/spans
+      LOGSTASH_HOST: copa-logstash
+      LOGSTASH_PORT: 5000
+      COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
+      TZ: Asia/Seoul
+    depends_on:
+      copa-ticket-mysql:
+        condition: service_healthy
+      copa-ticket-redis:
+        condition: service_healthy
+      copa-kafka:
+        condition: service_healthy
+
   copa-gateway:
     build:
       context: ./copa-gateway
@@ -485,6 +550,7 @@ services:
       ORDER_SERVICE_URI: http://copa-order:8085
       PAYMENT_SERVICE_URI: http://copa-payment:8084
       COUPON_SERVICE_URI: http://copa-coupon:8086
+      TICKET_SERVICE_URI: http://copa-ticket:8087
       JWT_SECRET: local-dev-secret-please-change-this-to-a-shared-256-bit-key
       COPA_INTERNAL_SECRET: ${COPA_INTERNAL_SECRET:-local-dev-internal-secret-please-change-this-to-a-256-bit-value}
       TZ: Asia/Seoul
@@ -498,6 +564,8 @@ services:
       copa-payment:
         condition: service_started
       copa-coupon:
+        condition: service_started
+      copa-ticket:
         condition: service_started
 
 volumes:
@@ -513,3 +581,5 @@ volumes:
   copa-order-mysql-data:
   copa-coupon-mysql-data:
   copa-coupon-redis-data:
+  copa-ticket-mysql-data:
+  copa-ticket-redis-data:

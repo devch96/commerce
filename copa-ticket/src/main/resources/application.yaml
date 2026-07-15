@@ -1,0 +1,90 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: copa-ticket
+  datasource:
+    # auth(3306)·product(3307)·inventory(3308)·payment(3309)·order(3310)·coupon(3311)과 호스트 포트 충돌을 피하려 3312로 매핑한다.
+    url: ${DB_URL:jdbc:mysql://localhost:3312/copa_ticket?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul}
+    username: ${DB_USERNAME:copa}
+    password: ${DB_PASSWORD:copa}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    # 스키마는 Flyway 마이그레이션으로만 관리한다. Hibernate DDL 자동 생성은 사용하지 않는다.
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  # 선착순 발권의 권위 데이터(좌석·1인1매 집합·대기열·입장 허가). auth(6379)·product(6380)·coupon(6381)과 분리해 6382로 매핑.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6382}
+  # 발권 성공분을 ticket-issued 토픽으로 발행 → 컨슈머가 DB 반영(최종 일관성).
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # 유실 0을 위해 모든 ISR 확인 + 멱등 프로듀서.
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: ${TICKET_ISSUED_GROUP_ID:copa-ticket-issued}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+# 선착순 예매(대기열 + Redis 원자 발권 + Kafka 비동기 DB 반영).
+copa:
+  # 내부 인증 필터: 게이트웨이 신원 토큰 검증 + /internal 서비스 토큰 검증(운영 on).
+  security:
+    enabled: true
+  # 신원/서비스 토큰 서명 검증용 공유 시크릿(게이트웨이와 동일 값이어야 한다).
+  internal:
+    secret: ${COPA_INTERNAL_SECRET:local-dev-internal-secret-please-change-this-to-a-256-bit-value}
+  ticket:
+    queue:
+      scheduler:
+        enabled: true
+      # 입장 배치 크기 × (1000/주기 ms) = 초당 입장 허가 인원. 발권 유입의 유량 제어 밸브.
+      admit-interval-ms: 1000
+      admit-batch-size: 100
+      # 입장 허가 유효 시간. 이 안에 발권하지 않으면 허가가 소멸해 대기열 재진입이 필요하다.
+      entry-ttl-seconds: 300
+    consumer:
+      enabled: true
+      group-id: copa-ticket-issued
+
+# ── 관측성(Observability): actuator·메트릭·트레이싱 ──────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # HTTP 지연 히스토그램 버킷 발행(Grafana p95/p99 계산용).
+      percentiles-histogram:
+        http.server.requests: true
+        http.client.requests: true
+  tracing:
+    sampling:
+      # 개발 단계는 전량 샘플링. 운영에서는 낮춰야 한다.
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}

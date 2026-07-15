@@ -24,10 +24,13 @@
 │   ├── 08. 프로모션·쿠폰 & 플래시세일.md
 │   ├── 09. 검색 서비스.md
 │   ├── 10. 리뷰 서비스.md
-│   └── 11. AI 추천·상담 서비스.md
-└── 13주차/
-    ├── 1일차) 프로젝트 계획 수립.md
-    └── 주차 별 프로젝트 작업 플랜 가이드.md
+│   ├── 11. AI 추천·상담 서비스.md
+│   └── 12. 예매 서비스 (대규모 트래픽 선착순).md
+├── 13주차/
+│   ├── 1일차) 프로젝트 계획 수립.md
+│   └── 주차 별 프로젝트 작업 플랜 가이드.md
+├── 14주차/ · 15주차/ · 17주차/   (주차별 "설계 고민 기록")
+└── 후속조치/                      (커리큘럼 종료 후 작업 기록 — 리포지토리 docs/FOLLOW_UP과 짝)
 ```
 
 > 사용자가 명시적으로 다른 자료를 지정하지 않는 한, 특정 서비스(회원/상품/재고/주문/결제 등)를 작업할 때는
@@ -78,6 +81,7 @@
 | `copa-payment` | 결제 서비스 | `com.sparta.copa.copapayment` |
 | `copa-order` | 주문 서비스 (Saga 오케스트레이터) | `com.sparta.copa.copaorder` |
 | `copa-coupon` | 쿠폰·프로모션 서비스 | `com.sparta.copa.copacoupon` |
+| `copa-ticket` | 선착순 예매 서비스 (대기열 + 원자 발권) | `com.sparta.copa.copaticket` |
 
 - 공통: Spring Boot `3.5.14`, Java 21 (toolchain), Spring Cloud `2025.0.0` (gateway).
 - 인증: `jjwt 0.12.6` 기반 JWT. 게이트웨이에서 토큰 검증 후 라우팅.
@@ -122,7 +126,16 @@
   할인 `type`(FIXED_AMOUNT/PERCENTAGE, 정률은 `maxDiscount` 상한), 유효기간 3종, `minOrderAmount`, 한정 수량(`total/issuedQuantity`), `targetType`(현재 ALL).
   발급은 **비관적 락 + 유니크**로 초과/중복 발급 0. 내부 API(`/internal/coupons`) **reserve(검증+할인계산)·confirm(use)·release·restore**는 `orderId` 멱등(주문 Saga가 호출).
   사용자용 발급/조회(`/coupons/**`), 관리(`/admin/coupons/**`, ADMIN). DB는 **MySQL**(`copa-coupon-mysql`). **Phase 1=동기**(Redis 선착순·Kafka는 Phase 2~3).
-- 게이트웨이는 `/orders/**`·`/admin/orders/**`를 `copa-order`로, `/payments/**`를 `copa-payment`로, `/coupons/**`·`/admin/coupons/**`를 `copa-coupon`으로 라우팅한다(모두 인증 필요).
+- **`copa-ticket`**: 대규모 트래픽 **선착순 예매**(후속조치 1일차, 설계 12). 선착순 쿠폰의 "Redis Lua 원자 연산 + Kafka 비동기 DB 반영" 골격에
+  **가상 대기열**(08-C)을 얹었다. 흐름: 관리자 오픈(좌석 Redis 시드) → 사용자 대기열 진입(`POST /events/{id}/queue`, ZSET score=진입시각) →
+  입장 스케줄러(`QueueAdmissionScheduler`, 1초마다 상위 N명 pop+입장 허가 키 SETEX, `queue_admit.lua`) → 발권(`POST /events/{id}/tickets`,
+  `ticket_issue.lua`: 입장 검증+1인 1매+좌석 차감+입장권 소모 원자 실행) → 통과분만 Kafka `ticket-issued` → 컨슈머 멱등 INSERT.
+  발행 실패 시 Redis 보상(SREM+INCR+입장권 재부여). 입장 허가는 별도 토큰 값 없이 **인증된 userId 기반 키 존재**로 판정(`ticket:{id}:entry:{uid}`).
+  외부 식별자 `ticketNo`(`TKT-yyyyMMdd-XXXXXX`), (event_id,user_id) 유니크=1인 1매 최종 방어선. 취소는 DB 전이(중복 취소 409) 후 좌석 Redis 복원.
+  DB **MySQL**(`copa-ticket-mysql`, 3312) + Flyway, Redis(`copa-ticket-redis`, 6382), 포트 8087. 스케줄러·컨슈머는
+  `copa.ticket.queue.scheduler.enabled`/`copa.ticket.consumer.enabled`로 게이팅(테스트 비활성). 결제 연동은 후속(현재 발권=확정).
+- 게이트웨이는 `/orders/**`·`/admin/orders/**`를 `copa-order`로, `/payments/**`를 `copa-payment`로, `/coupons/**`·`/admin/coupons/**`를 `copa-coupon`으로,
+  `/events/**`·`/tickets/**`·`/admin/events/**`를 `copa-ticket`으로 라우팅한다(모두 인증 필요, 예매 이벤트 목록/상세 `GET /events`·`GET /events/*`만 공개).
   `/internal/**`은 게이트웨이를 거치지 않고 서비스가 직접 호출한다.
 - 게이트웨이 화이트리스트는 `GET /products`처럼 `METHOD path` 형식으로 메서드별 공개를 지정할 수 있다(메서드 생략 시 전체 공개).
 
@@ -144,6 +157,8 @@ docker compose up -d
 - `copa-payment-mysql`: 3309→3306, db=`copa_payment`, user=`copa`/`copa` (root=`root`)
 - `copa-order-mysql`: 3310→3306, db=`copa_order`, user=`copa`/`copa` (root=`root`)
 - `copa-coupon-mysql`: 3311→3306, db=`copa_coupon`, user=`copa`/`copa` (root=`root`)
+- `copa-ticket-mysql`: 3312→3306, db=`copa_ticket`, user=`copa`/`copa` (root=`root`)
+- `copa-ticket-redis`: 6382→6379 (선착순 예매: 좌석·1인1매·대기열·입장 허가)
 - `copa-kafka`: 9092 (KRaft 단일 노드, advertised `localhost:9092`). 첫 이벤트 흐름은 상품 생성 → 재고 시드(토픽 `product-events`).
   상품 변경 → 검색 색인 흐름은 토픽 `product-search-events`(copa-product outbox → copa-product 색인기 → Elasticsearch).
   주문 Saga·쿠폰 선착순의 Kafka 전환은 후속 단계.

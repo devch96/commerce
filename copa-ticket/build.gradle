@@ -1,0 +1,58 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.14'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.sparta.copa'
+version = '0.0.1-SNAPSHOT'
+description = 'copa-ticket'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+// 게이트웨이가 서명한 내부 신원/서비스 토큰 검증(HS256).
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+
+    // 선착순 예매: 대기열(ZSET) + Redis 원자 발권(Lua) + Kafka 비동기 DB 반영.
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
+
+    // ── 관측성(Observability) ─────────────────────────────
+    implementation 'org.springframework.boot:spring-boot-starter-aop'      // AOP 메서드 로깅
+    implementation 'org.springframework.boot:spring-boot-starter-actuator' // /actuator (health, prometheus 등)
+    implementation 'io.micrometer:micrometer-registry-prometheus'          // 메트릭 → Prometheus/Grafana
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'         // 분산 트레이싱(Micrometer→Brave)
+    implementation 'io.zipkin.reporter2:zipkin-reporter-brave'             // 트레이스 Zipkin 전송
+    implementation 'net.logstash.logback:logstash-logback-encoder:8.0'     // JSON 로그 → Logstash(ELK)
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'com.h2database:h2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

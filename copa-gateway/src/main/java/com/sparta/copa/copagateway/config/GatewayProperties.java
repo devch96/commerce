@@ -14,15 +14,17 @@ public class GatewayProperties {
   private final URI orderServiceUri;
   private final URI paymentServiceUri;
   private final URI couponServiceUri;
+  private final URI ticketServiceUri;
   private final List<String> whitelist;
 
   public GatewayProperties(URI authServiceUri, URI productServiceUri, URI orderServiceUri,
-      URI paymentServiceUri, URI couponServiceUri, List<String> whitelist) {
+      URI paymentServiceUri, URI couponServiceUri, URI ticketServiceUri, List<String> whitelist) {
     this.authServiceUri = authServiceUri;
     this.productServiceUri = productServiceUri;
     this.orderServiceUri = orderServiceUri;
     this.paymentServiceUri = paymentServiceUri;
     this.couponServiceUri = couponServiceUri;
+    this.ticketServiceUri = ticketServiceUri;
     this.whitelist = whitelist == null ? List.of() : List.copyOf(whitelist);
   }
 }

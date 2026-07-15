@@ -52,6 +52,7 @@ class JwtAuthenticationFilterTest {
         URI.create("http://localhost:8085"),
         URI.create("http://localhost:8084"),
         URI.create("http://localhost:8086"),
+        URI.create("http://localhost:8087"),
         List.of("/auth/login", "/auth/signup", "/auth/reissue", "GET /products", "GET /products/**"));
     this.filter = new JwtAuthenticationFilter(jwtProvider, internalTokenIssuer, gatewayProperties);
   }

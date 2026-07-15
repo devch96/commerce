@@ -22,6 +22,8 @@ gateway:
   payment-service-uri: ${PAYMENT_SERVICE_URI:http://localhost:8084}
   # 쿠폰 발급/조회·관리는 인증 필요(화이트리스트에 없음).
   coupon-service-uri: ${COUPON_SERVICE_URI:http://localhost:8086}
+  # 선착순 예매. 이벤트 목록/상세만 공개하고 대기열·발권·취소는 인증 필요.
+  ticket-service-uri: ${TICKET_SERVICE_URI:http://localhost:8087}
   # 'METHOD path' 형식이면 해당 메서드에만 공개, 경로만 적으면 모든 메서드에 공개한다.
   # 상품 조회는 비로그인 공개(인증은 주문 단계부터). 등록/수정/삭제(POST/PUT/DELETE)는
   # 인증을 거쳐 X-User-Role이 주입되고 copa-product에서 ADMIN 권한을 재검증한다.
@@ -33,6 +35,10 @@ gateway:
     - GET /products/**
     - GET /categories
     - GET /categories/**
+    # 예매 이벤트 브라우징만 공개. GET /events/*는 한 세그먼트만 매칭하므로
+    # /events/{id}/queue/** 등 하위 경로는 인증을 유지한다(AntPathMatcher).
+    - GET /events
+    - GET /events/*
 
 # ── 관측성(Observability): actuator·메트릭·트레이싱 ──────────────
 management:
